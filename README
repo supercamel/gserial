@@ -1,0 +1,33 @@
+********************************************************************************
+
+                                                          ___  
+                                           .-.           (   ) 
+  .--.       .--.      .--.    ___ .-.    ( __)   .---.   | |  
+ /    \    /  _  \    /    \  (   )   \   (''")  / .-, \  | |  
+;  ,-. '  . .' `. ;  |  .-. ;  | ' .-. ;   | |  (__) ; |  | |  
+| |  | |  | '   | |  |  | | |  |  / (___)  | |    .'`  |  | |  
+| |  | |  _\_`.(___) |  |/  |  | |         | |   / .'| |  | |  
+| |  | | (   ). '.   |  ' _.'  | |         | |  | /  | |  | |  
+| '  | |  | |  `\ |  |  .'.-.  | |         | |  ; |  ; |  | |  
+'  `-' |  ; '._,' '  '  `-' /  | |         | |  ' `-'  |  | |  
+ `.__. |   '.___.'    `.__.'  (___)       (___) `.__.'_. (___) 
+ ( `-' ;                                                       
+  `.__.                                                        
+
+********************************************************************************
+
+
+WHAT
+
+gserial is a library for serial port communications. You could use it to talk
+to Arduinos and other things. 
+
+gserial is written in C using the GLib Object System (GObject). 
+
+WHY
+
+Before gserial it was very difficult, maybe even impossible, to use a serial 
+port in Vala and GJS across Linux and Windows operating systems. gserial makes 
+it very easy. 
+
+
