@@ -23,7 +23,7 @@ static void port_enum_clear_func(gpointer data)
     g_free(data);
 }
 
-GArray* gserial_enumerate_ports()
+GArray* gserial_enumerate_ports(void)
 {
     GArray* port_arr = g_array_new(FALSE, FALSE, sizeof(gchar*));
     g_array_set_clear_func(port_arr, port_enum_clear_func);
@@ -41,6 +41,7 @@ struct _gserialPortPrivate
 #endif
 
     gserialByteSize byte_size;
+    gserialStopBits stopbits;
     gserialParity parity;
     int baud;
     int timeout;
@@ -54,6 +55,7 @@ struct _gserialPortPrivate
 enum {
     PROP_0,
     PROP_BYTESIZE,
+    PROP_STOPBITS,
     PROP_PARITY,
     PROP_BAUD,
     PROP_TIMEOUT,
@@ -72,6 +74,9 @@ static void gserial_port_get_property(GObject* object,
     {
     case PROP_BYTESIZE:
         g_value_set_int(value, port->priv->byte_size);
+        break;
+    case PROP_STOPBITS:
+        g_value_set_int(value, port->priv->stopbits);
         break;
     case PROP_PARITY:
         g_value_set_int(value, port->priv->parity);
@@ -99,6 +104,9 @@ static void gserial_port_set_property (GObject      *object,
     case PROP_BYTESIZE:
         port->priv->byte_size = g_value_get_int(value);
         break;
+    case PROP_STOPBITS:
+        port->priv->stopbits = g_value_get_int(value);
+        break;
     case PROP_PARITY:
         port->priv->parity = g_value_get_int(value);
         break;
@@ -107,6 +115,8 @@ static void gserial_port_set_property (GObject      *object,
         break;
     case PROP_TIMEOUT:
         port->priv->timeout = g_value_get_int(value);
+        gserial_port_set_timeout(port, port->priv->timeout);
+        break;
     default:
         G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
     }
@@ -132,6 +142,12 @@ gserial_port_class_init(gserialPortClass *klass)
                                     g_param_spec_int("parity", "Parity", "Parity",
                                             GSERIAL_PARITY_NONE, GSERIAL_PARITY_EVEN,
                                             GSERIAL_PARITY_NONE,
+                                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT));
+
+    g_object_class_install_property(gobject_class, PROP_STOPBITS,
+                                    g_param_spec_int("stopbits", "Stop bits", "Stop bits",
+                                            GSERIAL_STOPBITS_ONE, GSERIAL_STOPBITS_ONEHALF,
+                                            GSERIAL_STOPBITS_ONE,
                                             G_PARAM_READWRITE | G_PARAM_CONSTRUCT));
 
     g_object_class_install_property(gobject_class, PROP_BAUD,
@@ -265,10 +281,33 @@ void gserial_port_set_parity(gserialPort* self, gserialParity p)
     self->priv->parity = p;
 }
 
+void gserial_port_set_stopbits(gserialPort* self, gserialStopBits s)
+{
+    g_return_if_fail(GSERIAL_IS_PORT(self));
+    self->priv->stopbits = s;
+}
+
 void gserial_port_set_timeout(gserialPort* self, int timeout)
 {
     g_return_if_fail (GSERIAL_IS_PORT(self));
     self->priv->timeout = timeout;
+
+    if(self->priv->fd == 0)
+        return;
+
+#ifdef _WIN32
+
+    COMMTIMEOUTS ct;
+    ct.ReadIntervalTimeout = timeout;
+    ct.ReadTotalTimeoutMultiplier = 1;
+    ct.ReadTotalTimeoutConstant = timeout;
+    ct.WriteTotalTimeoutMultiplier = 1;
+    ct.WriteTotalTimeoutConstant = timeout;
+    g_warn_if_fail(SetCommTimeouts(self->priv->fd, &ct));
+#else
+
+#endif
+
 }
 
 void gserial_port_set_baud(gserialPort* self, int baud)
@@ -418,16 +457,6 @@ gint gserial_port_write(gserialPort* self, GArray* garray)
     return write(self->priv->fd, garray->data, garray->len);
 #endif
 }
-
-void gserial_port_get_stuff(gserialPort* self, GArray** garray)
-{
-    g_return_if_fail(GSERIAL_IS_PORT(self));
-
-    *garray = g_array_new (FALSE, FALSE, sizeof (gchar));
-    for(int i = 0; i < 5; i++)
-        g_array_append_val(*garray, i);
-}
-
 
 gserialPort* gserial_port_new (void)
 {

@@ -1,3 +1,6 @@
+/**
+ *
+ */
 
 #ifndef __GSERIAL_H__
 #define __GSERIAL_H__
@@ -20,6 +23,13 @@ typedef enum
 	GSERIAL_PARITY_ODD,
 	GSERIAL_PARITY_EVEN
 } gserialParity;
+
+typedef enum
+{
+    GSERIAL_STOPBITS_ONE,
+    GSERIAL_STOPBITS_TWO,
+    GSERIAL_STOPBITS_ONEHALF
+} gserialStopBits;
 
 
 typedef struct _gserialPortInfo gserialPortInfo;
@@ -60,7 +70,7 @@ struct _gserialPortClass
   * Return value: (element-type gserialPortInfo)(transfer full):
   */
 
-GArray* gserial_enumerate_ports();
+GArray* gserial_enumerate_ports(void);
 
  /**
   * gserial_port_get_type:
@@ -82,9 +92,40 @@ gserialPort* gserial_port_new (void);
   */
 gserialPort* gserial_port_new_with_params(gserialByteSize sz, gserialParity p, int timeout, int baud);
 
+ /**
+  * gserial_port_set_byte_size:
+  * @port: self
+  * @sz: size of byte data
+  */
 void gserial_port_set_byte_size(gserialPort* port, gserialByteSize sz);
+
+ /**
+  * gserial_port_set_parity:
+  * @port: self
+  * @p: parity type. GSERIAL_PARITY_NONE is the most common.
+  */
 void gserial_port_set_parity(gserialPort* port, gserialParity p);
+
+ /**
+  * gserial_port_set_stopbits:
+  * @port: self
+  * @s: stop bits. Can be one, two or 1.5
+  */
+void gserial_port_set_stopbits(gserialPort* port, gserialStopBits s);
+
+///TODO fix gserial_port_set_timeout. doesn't work at all now.
+ /**
+  * gserial_port_set_timeout:
+  * @port: self
+  * @timeout: length of read/write timeout in milliseconds
+  */
 void gserial_port_set_timeout(gserialPort* port, int timeout);
+
+ /**
+  * gserial_port_set_baud:
+  * @port: self
+  * @baud: coms port bit rate.
+  */
 void gserial_port_set_baud(gserialPort* port, int baud);
 
  /**
@@ -146,13 +187,6 @@ void gserial_port_read_string(gserialPort* port, guint len_in, gchar** str);
   * Returns: number of bytes that were written
   */
 gint gserial_port_write(gserialPort* port, GArray* garray);
-
- /**
-  * gserial_port_get_stuff:
-  * @port: (in): a gserialPort
-  * @garray: (out)(element-type gchar)(transfer full):
-  */
-void gserial_port_get_stuff(gserialPort* port, GArray** garray);
 
 
 G_END_DECLS

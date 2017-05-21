@@ -1,18 +1,18 @@
 ********************************************************************************
 
-                                                          ___  
-                                           .-.           (   ) 
-  .--.       .--.      .--.    ___ .-.    ( __)   .---.   | |  
- /    \    /  _  \    /    \  (   )   \   (''")  / .-, \  | |  
-;  ,-. '  . .' `. ;  |  .-. ;  | ' .-. ;   | |  (__) ; |  | |  
-| |  | |  | '   | |  |  | | |  |  / (___)  | |    .'`  |  | |  
-| |  | |  _\_`.(___) |  |/  |  | |         | |   / .'| |  | |  
-| |  | | (   ). '.   |  ' _.'  | |         | |  | /  | |  | |  
-| '  | |  | |  `\ |  |  .'.-.  | |         | |  ; |  ; |  | |  
-'  `-' |  ; '._,' '  '  `-' /  | |         | |  ' `-'  |  | |  
- `.__. |   '.___.'    `.__.'  (___)       (___) `.__.'_. (___) 
- ( `-' ;                                                       
-  `.__.                                                        
+                                                          ___
+                                           .-.           (   )
+  .--.       .--.      .--.    ___ .-.    ( __)   .---.   | |
+ /    \    /  _  \    /    \  (   )   \   (''")  / .-, \  | |
+;  ,-. '  . .' `. ;  |  .-. ;  | ' .-. ;   | |  (__) ; |  | |
+| |  | |  | '   | |  |  | | |  |  / (___)  | |    .'`  |  | |
+| |  | |  _\_`.(___) |  |/  |  | |         | |   / .'| |  | |
+| |  | | (   ). '.   |  ' _.'  | |         | |  | /  | |  | |
+| '  | |  | |  `\ |  |  .'.-.  | |         | |  ; |  ; |  | |
+'  `-' |  ; '._,' '  '  `-' /  | |         | |  ' `-'  |  | |
+ `.__. |   '.___.'    `.__.'  (___)       (___) `.__.'_. (___)
+ ( `-' ;
+  `.__.
 
 ********************************************************************************
 
@@ -20,14 +20,37 @@
 WHAT
 
 gserial is a library for serial port communications. You could use it to talk
-to Arduinos and other things. 
+to Arduinos and other things.
 
-gserial is written in C using the GLib Object System (GObject). 
+gserial is written in C using the GLib Object System (GObject). It is
+introspectable, meaning that bindings are auto-magically generated for a
+number of different programming languages including Javascript (gjs), Vala,
+Python, Java, Perl, Scheme, Lua . . . and so on.
+
+gserial is also cross-platform. It has been built under Arch Linux (64bit),
+Windows 10 (64bit, using MSYS2) and Windows 8 (32bit, also MSYS2).
 
 WHY
 
-Before gserial it was very difficult, maybe even impossible, to use a serial 
-port in Vala and GJS across Linux and Windows operating systems. gserial makes 
-it very easy. 
+gserial exists so that Vala programs could have a simple but comprehensive
+cross-platform library for using serial ports.
 
+libserialport is an alternative. It's more comprehensive and mature, but it
+does not use GObjects.
 
+HOW - Compile & Install
+
+./autogen.sh --enable-vala
+make
+make install
+
+If you get any errors, please report them on Github.
+
+HOW - To Use
+
+Check out the examples folder!
+
+WHO & WHERE
+
+Samuel Cowen www.camelsoftware.com
+http://github.com/supercamel/gserial
