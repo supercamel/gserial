@@ -1,6 +1,3 @@
-/**
- *
- */
 
 #ifndef __GSERIAL_H__
 #define __GSERIAL_H__
@@ -31,6 +28,16 @@ typedef enum
     GSERIAL_STOPBITS_ONEHALF
 } gserialStopBits;
 
+
+typedef enum
+{
+	GSERIAL_ERROR_PORT_OPEN,
+	GSERIAL_ERROR_PORT_READ,
+	GSERIAL_ERROR_PORT_WRITE
+} gserialErrorPort;
+#define GSERIAL_ERROR_PORT gserial_error_port_quark()
+
+GQuark gserial_error_port_quark(void);
 
 typedef struct _gserialPortInfo gserialPortInfo;
 
@@ -154,7 +161,7 @@ void gserial_port_close(gserialPort* port);
   * @port: (in): a gserialPort
   * Returns: number of bytes that can be read
   */
-guint gserial_port_available(gserialPort* port);
+guint gserial_port_available(gserialPort* port, GError** error);
 
  /**
   * gserial_port_read_bytes:
@@ -162,7 +169,7 @@ guint gserial_port_available(gserialPort* port);
   * @len_in: (in): length to read
   * @garray: (out)(element-type gchar)(transfer full):
   */
-void gserial_port_read_bytes(gserialPort* port, guint len_in, GArray** garray);
+void gserial_port_read_bytes(gserialPort* port, guint len_in, GArray** garray, GError** error);
 
  /**
   * gserial_port_read_bytes_until:
@@ -170,7 +177,7 @@ void gserial_port_read_bytes(gserialPort* port, guint len_in, GArray** garray);
   * @stop_char: stop reading when this character is reached.
   * @garray: (out)(element-type gchar)(transfer full):
   */
-void gserial_port_read_bytes_until(gserialPort* port, gchar stop_char, GArray** garray);
+void gserial_port_read_bytes_until(gserialPort* port, gchar stop_char, GArray** garray, GError** error);
 
  /**
   * gserial_port_read_string:
@@ -178,7 +185,7 @@ void gserial_port_read_bytes_until(gserialPort* port, gchar stop_char, GArray** 
   * @len_in: length of string to read
   * @str: (out)(transfer full): string that has been read. null terminated.
   */
-void gserial_port_read_string(gserialPort* port, guint len_in, gchar** str);
+void gserial_port_read_string(gserialPort* port, guint len_in, gchar** str, GError** error);
 
  /**
   * gserial_port_write:
@@ -186,7 +193,7 @@ void gserial_port_read_string(gserialPort* port, guint len_in, gchar** str);
   * @garray: (in)(element-type gchar): byte array containing data to write
   * Returns: number of bytes that were written
   */
-gint gserial_port_write(gserialPort* port, GArray* garray);
+gint gserial_port_write(gserialPort* port, GArray* garray, GError** error);
 
 
 G_END_DECLS

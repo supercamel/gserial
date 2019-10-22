@@ -9,7 +9,7 @@ print("starting...")
 port = gserial.Port()
 
 print("opening port")
-port.open("COM3")
+port.open("/dev/pts/6")
 
 if(port.is_open() == False):
     print("failed to open port");
@@ -18,3 +18,9 @@ else:
     print("port opened OK")
 
 print(port.write("Hello world!".encode("utf-8")))
+while(True):
+    if(port.available() > 0):
+        print(port.read_bytes(port.available()))
+
+
+

@@ -44,6 +44,14 @@ HOW - Compile & Install
 make
 make install
 
+
+BUILDING VAPI FILE
+
+cd src
+vapigen --library gserial-1.0 gserial-1.0.gir
+
+Copy the generated gserial-1.0.vapi file into /usr/share/vala/vapi
+
 If you get any errors, please report them on Github.
 
 HOW - To Use

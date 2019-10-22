@@ -10,15 +10,14 @@ port.open("/dev/ttyUSB0");
 
 if(port.is_open()) {
 	print("port is open!");
+	while(true) {
+		port.write("hello world!");
+
+		print("available: " + port.available());
+		var b = port.read_bytes_until(" ".charCodeAt(0));
+		print(b);
+	}
 }
 
-
-while(true) {
-	port.write("hello world!");
-	
-	print("available: " + port.available());
-	var b = port.read_bytes_until(" ".charCodeAt(0));
-	print(b);
-}
 
 
