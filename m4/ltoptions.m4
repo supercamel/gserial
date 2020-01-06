@@ -1,6 +1,6 @@
 # Helper functions for option handling.                    -*- Autoconf -*-
 #
-#   Copyright (C) 2004-2005, 2007-2009, 2011-2018 Free Software
+#   Copyright (C) 2004-2005, 2007-2009, 2011-2015 Free Software
 #   Foundation, Inc.
 #   Written by Gary V. Vaughan, 2004
 #
@@ -170,7 +170,11 @@ AC_ARG_ENABLE([shared],
     [p=${PACKAGE-default}
     case $enableval in
     yes) enable_shared=yes ;;
-    no) enable_shared=no ;;
+    no)
+      enable_shared=no
+      AC_DEFINE([LT_MINGW_STATIC_TESTSUITE_HACK], [1],
+         [Define if running the test suite so that test #27 works on MinGW.])
+      ;;
     *)
       enable_shared=no
       # Look at the argument we got.  We use all the common list separators.

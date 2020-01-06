@@ -328,22 +328,30 @@ void gserial_port_open(gserialPort* self, const gchar* path, GError** error)
 	self->priv->fd = CreateFile(path, GENERIC_READ|GENERIC_WRITE,
 			0, 0, OPEN_EXISTING, 0, 0);
 
-	g_warn_if_fail(self->priv->fd != INVALID_HANDLE_VALUE);
+	if(self->priv->fd == INVALID_HANDLE_VALUE) {
+		if(error != NULL) {
+			LPVOID lpMsgBuf;
+			DWORD dw = GetLastError();
+			FormatMessage(
+					FORMAT_MESSAGE_ALLOCATE_BUFFER |
+					FORMAT_MESSAGE_FROM_SYSTEM |
+					FORMAT_MESSAGE_IGNORE_INSERTS,
+					NULL,
+					dw,
+					MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+					(LPTSTR) &lpMsgBuf,
+					0, NULL );
 
-	if(self->priv->fd == INVALID_HANDLE_VALUE)
-	{
-		LPVOID lpMsgBuf;
-		DWORD dw = GetLastError();
-		FormatMessage(
-				FORMAT_MESSAGE_ALLOCATE_BUFFER |
-				FORMAT_MESSAGE_FROM_SYSTEM |
-				FORMAT_MESSAGE_IGNORE_INSERTS,
-				NULL,
-				dw,
-				MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-				(LPTSTR) &lpMsgBuf,
-				0, NULL );
-		LocalFree(lpMsgBuf);
+
+			g_set_error (error,
+					GSERIAL_ERROR_PORT,
+					GSERIAL_ERROR_PORT_OPEN,
+					"Failed to open port: %s",
+					(char*)lpMsgBuf);
+
+			LocalFree(lpMsgBuf);
+			return;
+		}
 	}
 #else
 	self->priv->fd = open(path, O_RDWR |O_NOCTTY | O_SYNC);
@@ -366,8 +374,13 @@ gboolean gserial_port_is_open(gserialPort* self)
 {
 	g_return_val_if_fail (GSERIAL_IS_PORT(self), FALSE);
 
+#ifdef _WIN32
+	if(self->priv->fd != INVALID_HANDLE_VALUE)
+		return TRUE;
+#else
 	if(self->priv->fd != -1)
 		return TRUE;
+#endif
 
 	return FALSE;
 }
