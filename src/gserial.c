@@ -325,7 +325,9 @@ void gserial_port_open(gserialPort* self, const gchar* path, GError** error)
 	g_return_if_fail (GSERIAL_IS_PORT(self));
 
 #ifdef _WIN32
-	self->priv->fd = CreateFile(path, GENERIC_READ|GENERIC_WRITE,
+	char fpath[128];
+	snprintf(fpath, 128, "\\\\.\\%s", path);
+	self->priv->fd = CreateFile(fpath, GENERIC_READ|GENERIC_WRITE,
 			0, 0, OPEN_EXISTING, 0, 0);
 
 	if(self->priv->fd == INVALID_HANDLE_VALUE) {
