@@ -36,7 +36,7 @@ GArray* gserial_enumerate_ports(void)
 }
 
 
-struct _gserialPortPrivate
+	struct _gserialPortPrivate
 {
 #ifdef _WIN32
 	HANDLE fd;
@@ -191,7 +191,6 @@ GType gserial_port_get_type (void)
 	}
 	return gserial_port_type_id_volatile;
 }
-
 
 static void set_interface_attr(gserialPort* self)
 {

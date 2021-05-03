@@ -9,7 +9,7 @@ print("starting...")
 port = gserial.Port()
 
 print("opening port")
-port.open("/dev/pts/6")
+port.open("/dev/ttyUSB0")
 
 if(port.is_open() == False):
     print("failed to open port");

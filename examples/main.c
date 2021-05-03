@@ -5,7 +5,7 @@
 int
 main (int argc, char *argv[])
 {
-	    GOptionContext *ctx;
+	GOptionContext *ctx;
     GError *error = NULL;
 
     ctx = g_option_context_new (NULL);
