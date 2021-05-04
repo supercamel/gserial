@@ -1,14 +1,13 @@
-
-project('libgserial', 'c',
-		version : '1.0.0',
-		license : 'MIT')
+project('gserial-1.0', 'c', 'vala', 
+	version: '0.1.0',
+	license: 'MIT')
 
 gnome = import('gnome')
 pkg = import('pkgconfig')
 
 dependencies = [
 	dependency('glib-2.0'),
-	dependency('gobject-2.0'),
+	dependency('gobject-2.0')
 ]
 
 pkg_mod = import('pkgconfig')
@@ -16,28 +15,31 @@ pkg_mod.generate(libraries : 'libgserial',
 		version : '1.0',
 		name : 'libgserial',
 		filebase : 'libgserial',
-		description : 'A serial port library for gtk applications')
+		description : 'A com port library for vala/gtk')
 
-install_headers('gserial.h')
+gserial_sources= [
+	'gserial.vala',
+	'gserial_os.c',
+	'gserial_os.vapi'
+]
 
-gserial_sources = ['gserial.c']
-gseriallib = shared_library('gserial',
+gseriallib= shared_library('gserial-1.0',
 		gserial_sources,
+		vala_header: 'gserial.h',
+		vala_vapi: 'gserial-1.0.vapi',
+		vala_gir: 'gserial-1.0.gir',
 		include_directories : '.',
 		dependencies : dependencies,
-		vala_vapi: 'gserial-1.0.vapi',
-		install : true)
+		install : true,
+		install_dir: [true, true, true, true])
 
 pkg.generate(gseriallib)
 
-gir = gnome.generate_gir(gseriallib, 
-		sources: ['gserial.c', 'gserial.h'],
-		namespace: 'gserial',
-		nsversion: '1.0',
-		identifier_prefix: 'gserial',
-		symbol_prefix: 'gserial',
-		export_packages: 'libgserial',
-		includes: [ 'GObject-2.0', 'GLib-2.0' ],
-		header: 'gserial.h',
-		install: true)
 
+g_ir_compiler = find_program('g-ir-compiler')
+custom_target('gserial typelib', command: [g_ir_compiler, '--output', '@OUTPUT@', '@INPUT@'],
+              input: meson.current_build_dir() / 'gserial-1.0.gir',
+              output: 'gserial-1.0.typelib',
+              depends: gseriallib,
+              install: true,
+              install_dir: get_option('libdir') / 'girepository-1.0')
