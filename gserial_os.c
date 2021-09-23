@@ -1,8 +1,54 @@
 #include "gserial_os.h"
 
+#ifndef _WIN32
+static int baud_to_b_value(int baud) {
+	//B0,  B50,  B75,  B110,  B134,  B150,  B200, B300, B600, B1200, B1800, B2400, B4800, B9600, B19200, B38400, B57600, B115200, B230400, B460800
+	switch(baud) {
+		case 50:
+			return B50;
+		case 75:
+			return B75;
+		case 110:
+			return B110;
+		case 134:
+			return B134;
+		case 150:
+			return B150;
+		case 200:
+			return B200;
+		case 300:
+			return B300;
+		case 600:
+			return B600;
+		case 1200:
+			return B1200;
+		case 1800:
+			return B1800;
+		case 2400:
+			return B2400;
+		case 4800:
+			return B4800;
+		case 9600:
+			return B9600;
+		case 19200:
+			return B19200;
+		case 38400:
+			return B38400;
+		case 57600:
+			return B57600;
+		case 115200:
+			return B115200;
+		case 230400:
+			return B230400;
+		case 460800:
+			return B460800;
+		}
+	return -1;
+}
+#endif
+
 void gserial_os_set_interface_attr(gserialOsHandleType* fd, int baud, int bytesize, int parity)
 {
-	printf("fd: %i\r\n", fd->fd);
 #ifdef _WIN32
 	DCB dcb = {0};
 	dcb.DCBlength = sizeof(DCB);
@@ -38,8 +84,12 @@ void gserial_os_set_interface_attr(gserialOsHandleType* fd, int baud, int bytesi
 		return;
 	}
 
-	cfsetospeed (&tty, baud);
-	cfsetispeed (&tty, baud);
+	int b_baud = baud_to_b_value(baud);
+	if(b_baud == -1) { //custom baud rate
+		b_baud = baud; // this may or may not work at all	
+	}
+	cfsetospeed (&tty, b_baud);
+	cfsetispeed (&tty, b_baud);
 
 	tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;     // 8-bit chars
 	// disable IGNBRK for mismatched baud tests; otherwise receive break
@@ -62,6 +112,11 @@ void gserial_os_set_interface_attr(gserialOsHandleType* fd, int baud, int bytesi
 		tty.c_cflag |= PARENB;
 	tty.c_cflag &= ~CSTOPB;
 	tty.c_cflag &= ~CRTSCTS;
+	tty.c_lflag &= ~ICANON;
+	tty.c_lflag &= ~ISIG;
+	tty.c_iflag &= ~(IGNBRK|BRKINT|PARMRK|ISTRIP|INLCR|IGNCR|ICRNL);
+	tty.c_oflag &= ~OPOST; // Prevent special interpretation of output bytes (e.g. newline chars)
+	tty.c_oflag &= ~ONLCR;
 
 	if (tcsetattr (fd->fd, TCSANOW, &tty) != 0)
 	{
@@ -83,7 +138,6 @@ gserialOsHandleType* gserial_os_open(char* path) {
 #else
 	gserialOsHandleType* fd = (gserialOsHandleType*)malloc(sizeof(gserialOsHandleType));;
    	fd->fd = open(path, O_RDWR |O_NOCTTY | O_SYNC);
-	printf("fd: %i\r\n", fd->fd);
 #endif
 	return fd;
 }
@@ -93,6 +147,7 @@ void gserial_os_close(gserialOsHandleType* fd) {
 	CloseHandle(fd->fd);
 #else
 	close(fd->fd);
+	fd->fd = -1;
 #endif
 }
 
@@ -127,7 +182,8 @@ int gserial_os_read(gserialOsHandleType* fd, char* bytes, int len)
 	ReadFile(fd->fd, (char*)bytes, len, &bytes_read, NULL);
 	return bytes_read;
 #else
-	return read(fd->fd, (char*)bytes, len);
+	int r = read(fd->fd, bytes, len);
+	return r;
 #endif
 }
 

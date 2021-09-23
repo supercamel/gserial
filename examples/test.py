@@ -2,7 +2,7 @@
 
 print("HERE")
 import gi
-gi.require_version('gserial-1.0', '1.0')
+gi.require_version('gserial', '1.0')
 from gi.repository import gserial
 
 print("starting...")
