@@ -37,8 +37,7 @@ pkg.generate(gseriallib)
 
 
 g_ir_compiler = find_program('g-ir-compiler')
-custom_target('gserial typelib', command: [g_ir_compiler, '--output', '@OUTPUT@', '@INPUT@'],
-              input: meson.current_build_dir() / 'gserial-1.0.gir',
+custom_target('gserial typelib', command: [g_ir_compiler, '--output', '@OUTPUT@', meson.current_build_dir() + '/gserial-1.0.gir'],
               output: 'gserial-1.0.typelib',
               depends: gseriallib,
               install: true,
