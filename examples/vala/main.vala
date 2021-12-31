@@ -5,14 +5,11 @@ public static int main() {
 
     port.set_baud(57600);
     port.connected.connect(() => {
-        print("Com port connected");
+        print("Com port connected\n");
 
-        var time = new TimeoutSource(100);
+        var time = new TimeoutSource(1000);
         time.set_callback(() => {
-            if(port.bytes_available() > 0) {
-                var bytes = port.read_bytes(port.bytes_available());
-                // do something with bytes
-            }
+            port.write_string("Hello\n");
             return true;
         });
 
@@ -20,11 +17,20 @@ public static int main() {
     });
 
     port.disconnected.connect(() => {
+        print("disconnected\n");
         loop.quit();
     });
 
+
+    port.on_data.connect((available) => {
+        print("received %i bytes\n".printf((int)available));
+        var data = port.read_bytes(available);
+
+        //do something with the bytes here
+    });
+
     port.open("/dev/ttyUSB0");
-    print("starting main loop");
+    print("starting main loop\n");
     loop.run();
     return 0;
 }

@@ -8,7 +8,7 @@
 
 #else
 
-#define GSERIAL_HANDLE_TYPE FILE* 
+#define GSERIAL_HANDLE_TYPE int 
 
 #include <termios.h>
 #include <unistd.h>
@@ -42,7 +42,7 @@ G_DEFINE_TYPE(GSerialPort, gserial_port, G_TYPE_OBJECT)
 enum {
     CONNECTED,
     DISCONNECTED,
-    DATA_READY,
+    DATA_RECV,
     LAST_SIGNAL
 };
 
@@ -230,6 +230,23 @@ static void set_interface_attr(
 }
 
 
+static gboolean poll_for_data(GSerialPort* self) 
+{
+    if(gserial_port_is_open(self)) 
+    {
+        int bytes_available = gserial_port_bytes_available(self);
+        if(bytes_available > 0)
+        {
+            g_signal_emit(self, signals[DATA_RECV], 0, bytes_available);
+        }
+        return TRUE;
+    }
+    else
+    {
+        return FALSE;
+    }
+}
+
 static void gserial_port_dispose(GObject* object) 
 {
     GSerialPort *self = 
@@ -272,12 +289,12 @@ static void gserial_port_class_init(GSerialPortClass* klass)
             NULL, NULL, NULL,
             G_TYPE_NONE, 0);
 
-    signals[DATA_READY] = g_signal_new("on_data",
+    signals[DATA_RECV] = g_signal_new("on_data",
             G_TYPE_FROM_CLASS(gobject_class),
             G_SIGNAL_RUN_LAST,
             0,
             NULL, NULL, NULL,
-            G_TYPE_NONE, 0);
+            G_TYPE_NONE, 1, G_TYPE_INT);
 
     gobject_class->dispose = gserial_port_dispose;
     gobject_class->finalize = gserial_port_finalize;
@@ -285,7 +302,7 @@ static void gserial_port_class_init(GSerialPortClass* klass)
 
 static void gserial_port_init(GSerialPort* self) 
 {
-    self->fd = NULL;
+    self->fd = 0;
     self->baud = 57600;
     self->byte_size = GSERIAL_BYTE_SIZE_EIGHTBIT;
     self->parity = GSERIAL_PARITY_NONE;
@@ -329,23 +346,23 @@ gboolean gserial_port_open(GSerialPort* self, gchar* path)
         return FALSE;
     }
 #else
-    int fd = open(path, O_RDWR | O_NOCTTY | O_SYNC);
-    if(fd == -1) 
+    self->fd = open(path, O_RDWR | O_NOCTTY | O_SYNC);
+    if(self->fd == -1) 
     {
         return FALSE;
     }
 
-    ioctl(fd, TIOCNXCL);
+    ioctl(self->fd, TIOCNXCL);
 
-    set_interface_attr(fd, 
+    set_interface_attr(self->fd, 
             self->baud, 
             self->byte_size, 
             self->parity, 
             self->stop_bits);
 
-    self->fd = fdopen(fd, "wb+");
 #endif
 
+    g_timeout_add(20, (GSourceFunc) poll_for_data, (gpointer)self);
     g_signal_emit(self, signals[CONNECTED], 0);
     return TRUE;
 }
@@ -356,8 +373,8 @@ void gserial_port_close(GSerialPort* self)
     CloseHandle(self->fd);
     self->fd = INVALID_HANDLE_VALUE;
 #else
-    fclose(self->fd);
-    self->fd = NULL;
+    close(self->fd);
+    self->fd = 0;
 #endif
     g_signal_emit(self, signals[DISCONNECTED], 0);
 }
@@ -371,7 +388,7 @@ gboolean gserial_port_is_open(GSerialPort* self)
         return TRUE;
     }
 #else
-    if(self->fd != NULL)
+    if(self->fd != 0)
     {
         return TRUE;
     }
@@ -388,7 +405,8 @@ guint gserial_port_bytes_available(GSerialPort* self)
         return com_stat.cbInQue;
 #else
         int bytes_available;
-        if(ioctl(fileno(self->fd), FIONREAD, &bytes_available) == -1) 
+        int r = ioctl(self->fd, FIONREAD, &bytes_available);
+        if(r == -1) 
         {
             gserial_port_close(self);
             return 0;
@@ -414,15 +432,13 @@ guint8* gserial_port_read_bytes(GSerialPort* self, guint len, gint* result_lengt
         ReadFile(self->fd, (char*)buf, len, &bytes_read, NULL);
         *result_length = bytes_read;
 #else
-        *result_length = fread(buf, len, 1, self->fd); 
-        if(*result_length != len) 
+        *result_length = read(self->fd, buf, len);
+        if(*result_length == -1) 
         {
-            if(ferror(self->fd)) 
-            {
-                gserial_port_close(self);
-            }
+            gserial_port_close(self);
         }
 #endif
+
         return buf; 
     }
     else 
@@ -454,18 +470,22 @@ gchar* gserial_port_read_string(GSerialPort* self, guint len)
         while((c != '\0') && (c != EOF));
 
 #else
-        while ((c = getc(self->fd)) != '\0' && c != EOF) 
+        do
         {
+            char c;
+            int bytes_read = read(self->fd, &c, 1);
             ret[pos++] = c;
-            if(pos >= len) 
-                break;
-        }
 
-        if(ferror(self->fd)) 
-        {
-            gserial_port_close(self);
+            if(bytes_read == -1)
+            {
+                gserial_port_close(self);
+                ret[pos] = '\0';
+                return ret; 
+            }
         }
+        while((c != '\0') && (c != EOF) && (pos < len));
 #endif
+
         return ret;
     }
     else 
@@ -483,8 +503,8 @@ gint gserial_port_write_bytes(GSerialPort* self, guint8* bytes, guint length)
         WriteFile(self->fd, (char*)bytes, length, &bw, NULL);
         return (gint)bw;
 #else
-        int r = fwrite(bytes, length, 1, self->fd);
-        if(ferror(self->fd)) 
+        int r = write(self->fd, bytes, length);
+        if(r == -1)
         {
             gserial_port_close(self);
         }
@@ -505,8 +525,8 @@ gint gserial_port_write_string(GSerialPort* self, const gchar* s)
         WriteFile(self->fd, s, strlen(s), &bw, NULL);
         return (gint)bw;
 #else
-        int r = fwrite(s, strlen(s), 1, self->fd);
-        if(ferror(self->fd)) 
+        int r = write(self->fd, s, strlen(s));
+        if(r == -1)
         {
             gserial_port_close(self);
         }
