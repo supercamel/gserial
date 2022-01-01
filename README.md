@@ -1,6 +1,6 @@
 # gserial
 
-gserial is a very small serial / COM port library. It is written in C using GObjects and through GObject introspection, it is useable in many different languages such as Python, Vala, etc
+gserial is a very small library for using serial ports in Gtk+ applications. It is written in C using GObjects and is useable in many different languages such as Python, Vala, etc. 
 
 It is compatible with both Windows and Linux. 
 
@@ -15,7 +15,7 @@ meson install
 
 # Development Status
 
-It's been tested in Linux but not very thoroughly (only 8N1 configuration). It hasn't even been compiled for Windows. 
+It's been tested in Linux but not very thoroughly (only 8N1 configuration). I have not compiled for Windows yet (need a tester). 
 
 # Useage
 
