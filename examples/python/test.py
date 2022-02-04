@@ -23,7 +23,7 @@ port.connect("on_data", on_data)
 port.connect("connected", connected)
 port.connect("disconnected", disconnected)
 
-if(port.open("/dev/ttyUSB0")):
+if(port.open("COM3")):
     print("opened ok")
 
 
