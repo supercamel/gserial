@@ -49,7 +49,12 @@ enum {
 static guint signals[LAST_SIGNAL];
 
 
-#ifndef _WIN32
+#ifdef _WIN32
+static int baud_to_cbr_value(int baud) {
+
+}
+
+#else
 static int baud_to_b_value(int baud) {
 	//B0,  B50,  B75,  B110,  B134,  B150,  B200, B300, B600, B1200, B1800, B2400, B4800, B9600, B19200, B38400, B57600, B115200, B230400, B460800
 	switch(baud) {
@@ -151,14 +156,11 @@ static void set_interface_attr(
 	}
 
 	dcb.fBinary = TRUE;
-	dcb.ByteSize = 8;
-	dcb.Parity = NOPARITY;
-	dcb.StopBits = ONESTOPBIT;
 	dcb.fOutxCtsFlow = FALSE;
 	dcb.fRtsControl = RTS_CONTROL_DISABLE;
 	dcb.fOutX = FALSE;
 	dcb.fInX = FALSE;
-	dcb.BaudRate = CBR_57600;
+	dcb.BaudRate = baud;
 
 	if(!SetCommState(fd, &dcb))
 	{
@@ -330,7 +332,12 @@ static void gserial_port_class_init(GSerialPortClass* klass)
 
 static void gserial_port_init(GSerialPort* self) 
 {
+#ifdef _WIN32
+	self->fd = INVALID_HANDLE_VALUE;
+#else
 	self->fd = 0;
+#endif
+
 	self->baud = 57600;
 	self->byte_size = GSERIAL_BYTE_SIZE_EIGHTBIT;
 	self->parity = GSERIAL_PARITY_NONE;
