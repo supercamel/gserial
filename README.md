@@ -6,16 +6,11 @@ It is compatible with both Windows and Linux.
 
 # To build
 
-meson --prefix=/usr --libdir=lib builddir
-
-cd builddir
-
-meson compile 
-meson install
-
-# Development Status
-
-It's been tested in Linux but not very thoroughly (only 8N1 configuration). I have not compiled for Windows yet (need a tester). 
+```
+meson --prefix=/usr builddir
+ninja -C builddir
+cd builddir && sudo meson install
+```
 
 # Useage
 
