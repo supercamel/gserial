@@ -6,6 +6,12 @@ It is compatible with both Windows and Linux.
 
 # Dependencies 
 
+Install meson & ninja to build the project
+```
+sudo pip3 install meson
+sudo pip3 install ninja
+```
+Install gobject introspection dev package
 ```
 apt install libgirepository1.0-dev
 ```
