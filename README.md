@@ -4,6 +4,12 @@ gserial is a very small library for using serial ports in Gtk+ applications. It 
 
 It is compatible with both Windows and Linux. 
 
+# Dependencies 
+
+```
+apt install libgirepository1.0-dev
+```
+
 # To build
 
 ```
