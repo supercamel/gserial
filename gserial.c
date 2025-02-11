@@ -538,7 +538,7 @@ gchar* gserial_port_read_string(GSerialPort* self, guint len)
 #ifdef _WIN32
 		do
 		{
-			unsigned int bytes_read;
+			DWORD bytes_read;
 			if((ReadFile(self->fd, &c, 1, &bytes_read, NULL) == FALSE) ||
 					(bytes_read == 0)) 
 			{
