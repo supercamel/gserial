@@ -57,6 +57,7 @@ guint gserial_port_bytes_available(GSerialPort* self);
  */
 guint8* gserial_port_read_bytes(GSerialPort* self, guint len, gint* result_length);
 gchar* gserial_port_read_string(GSerialPort* self, guint len);
+gchar* gserial_port_read_line(GSerialPort* self);
 
 /**
  * gserial_port_write_bytes:

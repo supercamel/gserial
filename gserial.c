@@ -528,51 +528,72 @@ guint8* gserial_port_read_bytes(GSerialPort* self, guint len, gint* result_lengt
 	}
 }
 
-gchar* gserial_port_read_string(GSerialPort* self, guint len)
-{
-	if(gserial_port_is_open(self)) 
-	{
-		gchar* ret = (gchar*)g_malloc(len);
-		int pos = 0;
-		char c = -1;
-#ifdef _WIN32
-		do
-		{
-			DWORD bytes_read;
-			if((ReadFile(self->fd, &c, 1, &bytes_read, NULL) == FALSE) ||
-					(bytes_read == 0)) 
-			{
-				break;
-			}
-			ret[pos++] = c;
-		}
-		while((c != '\0') && (c != EOF));
+gchar* gserial_port_read_string(GSerialPort* self, guint len) {
+    if (!gserial_port_is_open(self)) {
+        g_warning("gserial_port_read_string failed because the port is not open");
+        return NULL;
+    }
 
-#else
-		do
-		{
-			char c;
-			int bytes_read = read(self->fd, &c, 1);
-			ret[pos++] = c;
+    // Use read_bytes to read the data
+    gint result_length = 0;
+    guint8* data = gserial_port_read_bytes(self, len, &result_length);
 
-			if(bytes_read == -1)
-			{
-				gserial_port_close(self);
-				ret[pos] = '\0';
-				return ret; 
-			}
-		}
-		while((c != '\0') && (c != EOF) && (pos < len));
-#endif
+    if (data == NULL || result_length == 0) {
+        g_warning("Failed to read data from the serial port");
+        return NULL;
+    }
 
-		return ret;
-	}
-	else 
-	{
-		g_warning("gserial_port_read_string failed because the port is not open");
-		return NULL;
-	}
+    // Allocate memory for the string and ensure null-termination
+    gchar* ret = (gchar*)g_malloc(result_length + 1); // +1 for null-terminator
+    memcpy(ret, data, result_length);
+    ret[result_length] = '\0'; // Null-terminate the string
+
+    // Free the original data buffer
+    g_free(data);
+
+    return ret;
 }
+
+gchar* gserial_port_read_line(GSerialPort* self) {
+    if (!gserial_port_is_open(self)) {
+        g_warning("gserial_port_read_line failed because the port is not open");
+        return NULL;
+    }
+
+    GString* line_buffer = g_string_new(NULL); // Dynamic buffer to store the line
+    gboolean line_complete = FALSE; // Flag to indicate if a complete line has been read
+
+    while (!line_complete) {
+        // Read one character at a time
+        gint result_length = 0;
+        guint8* data = gserial_port_read_bytes(self, 1, &result_length);
+
+        if (data == NULL || result_length == 0) {
+            // No more data available or an error occurred
+            g_free(data);
+            break;
+        }
+
+        // Append the character to the buffer
+        g_string_append_c(line_buffer, (gchar)data[0]);
+
+        // Check for newline character
+        if (data[0] == '\n') {
+            line_complete = TRUE;
+        }
+
+        g_free(data); // Free the temporary data buffer
+    }
+
+    // Return the line as a null-terminated string
+    if (line_buffer->len > 0) {
+        return g_string_free(line_buffer, FALSE); // Transfer ownership of the buffer
+    } else {
+        g_string_free(line_buffer, TRUE); // Free the buffer if no data was read
+        return NULL;
+    }
+}
+
 
 gint gserial_port_write_bytes(GSerialPort* self, guint8* bytes, guint length)
 {
