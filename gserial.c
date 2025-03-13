@@ -194,23 +194,24 @@ static void set_interface_attr(
 
 	int b_baud = baud_to_b_value(baud);
 	if(b_baud == -1) { //custom baud rate
-		b_baud = baud; // this may or may not work at all	
-	}
+            tty.c_cflag |= BOTHER;
+            tty.c_ispeed = baud;
+            tty.c_ospeed = baud;
+        }
+	else {
 	cfsetospeed(&tty, b_baud);
 	cfsetispeed(&tty, b_baud);
+	}
 
-	if(byte_size == GSERIAL_BYTE_SIZE_FIVEBIT) {
-		tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS5;
-	}
-	else if(byte_size == GSERIAL_BYTE_SIZE_SIXBIT) {
-		tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS6;
-	}
-	else if(byte_size == GSERIAL_BYTE_SIZE_SEVENBIT) {
-		tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS7;
-	}
-	else if(byte_size == GSERIAL_BYTE_SIZE_EIGHTBIT) {
-		tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
-	}
+	switch(byte_size) {
+            case GSERIAL_BYTE_SIZE_FIVEBIT: tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS5; break;
+            case GSERIAL_BYTE_SIZE_SIXBIT: tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS6; break;
+            case GSERIAL_BYTE_SIZE_SEVENBIT: tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS7; break;
+            case GSERIAL_BYTE_SIZE_EIGHTBIT: tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8; break;
+            default:
+                g_warn_if_reached();
+                return;
+        }
 
 	// disable IGNBRK for mismatched baud tests; otherwise receive break
 	// as \000 chars
