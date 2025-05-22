@@ -74,6 +74,8 @@ static int baud_to_b_value(int baud)
     case 115200: return B115200;
     case 230400: return B230400;
     case 460800: return B460800;
+	case 500000: return B500000;
+	case 1000000: return B1000000;
     default: return -1; // Indicate custom baud rate
     }
 }
@@ -400,9 +402,11 @@ gboolean gserial_port_open(GSerialPort *self, gchar *path)
 					   self->parity,
 					   self->stop_bits);
 
+	// Flush any data in the buffer
+    tcflush(self->fd, TCIOFLUSH);
 #endif
 
-	g_timeout_add(20, (GSourceFunc)poll_for_data, (gpointer)self);
+	g_timeout_add(1, (GSourceFunc)poll_for_data, (gpointer)self);
 	g_signal_emit(self, signals[CONNECTED], 0);
 	return TRUE;
 }
