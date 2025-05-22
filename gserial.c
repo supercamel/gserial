@@ -336,7 +336,7 @@ static void gserial_port_init(GSerialPort *self)
 #ifdef _WIN32
 	self->fd = INVALID_HANDLE_VALUE;
 #else
-	self->fd = 0;
+	self->fd = -1;
 #endif
 
 	self->baud = 57600;
@@ -362,6 +362,12 @@ GSerialPort *gserial_port_new_with_params(
 	gserial_port_set_parity(self, parity);
 	gserial_port_set_timeout(self, timeout);
 	gserial_port_set_baud(self, baud);
+
+#ifdef _WIN32
+	self->fd = INVALID_HANDLE_VALUE;
+#else
+	self->fd = -1;
+#endif
 
 	return self;
 }
@@ -418,7 +424,7 @@ void gserial_port_close(GSerialPort *self)
 	self->fd = INVALID_HANDLE_VALUE;
 #else
 	close(self->fd);
-	self->fd = 0;
+	self->fd = -1;
 #endif
 	g_signal_emit(self, signals[DISCONNECTED], 0);
 }
@@ -432,7 +438,7 @@ gboolean gserial_port_is_open(GSerialPort *self)
 		return TRUE;
 	}
 #else
-	if (self->fd != 0)
+	if (self->fd != -1)
 	{
 		return TRUE;
 	}
