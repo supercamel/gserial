@@ -26,9 +26,9 @@ public static int main() {
         print("received %i bytes\n".printf((int)available));
         var data = port.read_string(available);
 		
-		for(int i = 0; i < available; i++) {
-			stdout.putc((char)data[i]);
-		}
+        for(int i = 0; i < available; i++) {
+            stdout.putc((char)data[i]);
+        }
 
         //do something with the bytes here
     });
