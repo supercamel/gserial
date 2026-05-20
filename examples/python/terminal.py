@@ -72,8 +72,8 @@ class SerialTerminal(Gtk.Application):
             return
 
         self.port = GSerial.Port.new()
-        self.port.baud = baud
-        self.port.timeout = 100
+        self.port.set_baud(baud)
+        self.port.set_timeout(100)
 
         self.port.connect("on_data", self.on_data)
         self.port.connect("connected", self.on_connected)

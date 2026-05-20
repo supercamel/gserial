@@ -1,8 +1,9 @@
 #include "GSerial-1.0.h"
 #include <stdio.h>
+#include <string.h>
 
 #ifdef _WIN32
-#include <Windows.h>
+#include <windows.h>
 
 #define GSERIAL_HANDLE_TYPE HANDLE
 
@@ -28,6 +29,8 @@ struct _GSerialPort
 	GSerialBYTE_SIZE byte_size;
 	GSerialPARITY parity;
 	GSerialSTOP_BITS stop_bits;
+	guint poll_source_id;
+	gboolean poll_source_dispatching;
 };
 
 G_DEFINE_TYPE(GSerialPort, gserial_port, G_TYPE_OBJECT)
@@ -35,6 +38,11 @@ G_DEFINE_TYPE(GSerialPort, gserial_port, G_TYPE_OBJECT)
 enum
 {
 	PROP_0,
+	PROP_BAUD,
+	PROP_TIMEOUT,
+	PROP_BYTE_SIZE,
+	PROP_PARITY,
+	PROP_STOP_BITS,
 	LAST_PROP
 };
 
@@ -47,6 +55,7 @@ enum
 };
 
 static guint signals[LAST_SIGNAL];
+static GParamSpec *properties[LAST_PROP];
 
 #ifdef _WIN32
 
@@ -82,11 +91,16 @@ static int baud_to_b_value(int baud)
 
 static int set_custom_baud(int fd, int baudrate)
 {
-    struct serial_struct ser;
+	struct serial_struct ser;
 
-    if (ioctl(fd, TIOCGSERIAL, &ser) < 0) {
-        perror("TIOCGSERIAL failed");
-        return -1;
+	if (baudrate <= 0) {
+		fprintf(stderr, "Invalid custom baud rate: %d\n", baudrate);
+		return -1;
+	}
+
+	if (ioctl(fd, TIOCGSERIAL, &ser) < 0) {
+		perror("TIOCGSERIAL failed");
+		return -1;
     }
 
     ser.flags &= ~ASYNC_SPD_MASK;
@@ -107,17 +121,24 @@ static int set_custom_baud(int fd, int baudrate)
 }
 #endif
 
-static void set_interface_attr(
+static gboolean set_interface_attr(
 #ifdef _WIN32
 	GSERIAL_HANDLE_TYPE fd,
 #else
 	int fd,
 #endif
 	int baud,
+	int timeout,
 	GSerialBYTE_SIZE byte_size,
 	GSerialPARITY parity,
 	GSerialSTOP_BITS stop_bits)
 {
+	if (baud <= 0)
+	{
+		g_warning("Invalid baud rate: %d", baud);
+		return FALSE;
+	}
+
 #ifdef _WIN32
 	DCB dcb = {0};
 	dcb.DCBlength = sizeof(DCB);
@@ -125,7 +146,7 @@ static void set_interface_attr(
 	if (!GetCommState(fd, &dcb))
 	{
 		g_warn_if_reached();
-		return;
+		return FALSE;
 	}
 
 	dcb.BaudRate = baud;
@@ -143,6 +164,9 @@ static void set_interface_attr(
 	case GSERIAL_BYTE_SIZE_EIGHTBIT:
 		dcb.ByteSize = 8;
 		break;
+	default:
+		g_warning("Invalid byte size");
+		return FALSE;
 	}
 
 	if (parity == GSERIAL_PARITY_NONE)
@@ -151,6 +175,11 @@ static void set_interface_attr(
 		dcb.Parity = ODDPARITY;
 	else if (parity == GSERIAL_PARITY_EVEN)
 		dcb.Parity = EVENPARITY;
+	else
+	{
+		g_warning("Invalid parity");
+		return FALSE;
+	}
 
 	if (stop_bits == GSERIAL_STOP_BITS_ONE)
 	{
@@ -164,6 +193,11 @@ static void set_interface_attr(
 	{
 		dcb.StopBits = TWOSTOPBITS;
 	}
+	else
+	{
+		g_warning("Invalid stop bits");
+		return FALSE;
+	}
 
 	dcb.fBinary = TRUE;
 	dcb.fOutxCtsFlow = FALSE;
@@ -175,39 +209,44 @@ static void set_interface_attr(
 	if (!SetCommState(fd, &dcb))
 	{
 		g_warn_if_reached();
+		return FALSE;
 	}
 
-	SetCommMask(fd, 0x1F9);
+	if (!SetCommMask(fd, 0x1F9))
+	{
+		g_warn_if_reached();
+		return FALSE;
+	}
 
 	COMMTIMEOUTS timeouts = {0};
-	timeouts.ReadIntervalTimeout = 100;
-	timeouts.ReadTotalTimeoutConstant = 500;
-	timeouts.ReadTotalTimeoutMultiplier = 100;
-	timeouts.WriteTotalTimeoutConstant = 50;
-	timeouts.WriteTotalTimeoutMultiplier = 10;
+	timeouts.ReadIntervalTimeout = (DWORD)timeout;
+	timeouts.ReadTotalTimeoutConstant = (DWORD)timeout;
+	timeouts.ReadTotalTimeoutMultiplier = 0;
+	timeouts.WriteTotalTimeoutConstant = (DWORD)timeout;
+	timeouts.WriteTotalTimeoutMultiplier = 0;
 	if (SetCommTimeouts(fd, &timeouts) == FALSE)
 	{
 		printf_s("\nError to Setting Time outs");
 		g_warn_if_reached();
-		return;
+		return FALSE;
 	}
 
 #else
-    struct termios tty;
-    memset(&tty, 0, sizeof tty);
-    if (tcgetattr(fd, &tty) != 0) {
-        perror("tcgetattr failed");
-        return;
-    }
+	struct termios tty;
+	memset(&tty, 0, sizeof tty);
+	if (tcgetattr(fd, &tty) != 0) {
+		perror("tcgetattr failed");
+		return FALSE;
+	}
 
-    int b_baud = baud_to_b_value(baud);
-    if (b_baud == -1) { // Custom baud rate
-        if (set_custom_baud(fd, baud) < 0) {
-            fprintf(stderr, "Failed to set custom baud rate: %d\n", baud);
-            return;
-        }
-    } else {
-        cfsetospeed(&tty, b_baud);
+	int b_baud = baud_to_b_value(baud);
+	if (b_baud == -1) { // Custom baud rate
+		if (set_custom_baud(fd, baud) < 0) {
+			fprintf(stderr, "Failed to set custom baud rate: %d\n", baud);
+			return FALSE;
+		}
+	} else {
+		cfsetospeed(&tty, b_baud);
         cfsetispeed(&tty, b_baud);
     }
 
@@ -222,60 +261,164 @@ static void set_interface_attr(
     case GSERIAL_BYTE_SIZE_SEVENBIT:
         tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS7;
         break;
-    case GSERIAL_BYTE_SIZE_EIGHTBIT:
-        tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
-        break;
-    default:
-        fprintf(stderr, "Invalid byte size\n");
-        return;
-    }
+	case GSERIAL_BYTE_SIZE_EIGHTBIT:
+		tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
+		break;
+	default:
+		fprintf(stderr, "Invalid byte size\n");
+		return FALSE;
+	}
 
-    tty.c_iflag &= ~IGNBRK;
-    tty.c_lflag = 0;
-    tty.c_oflag = 0;
-    tty.c_cc[VMIN] = 0;
-    tty.c_cc[VTIME] = 5;
-    tty.c_iflag &= ~(IXON | IXOFF | IXANY);
-    tty.c_cflag |= (CLOCAL | CREAD);
+	tty.c_iflag &= ~IGNBRK;
+	tty.c_lflag = 0;
+	tty.c_oflag = 0;
+	tty.c_cc[VMIN] = 0;
+	tty.c_cc[VTIME] = (cc_t)MIN((timeout + 99) / 100, 255);
+	tty.c_iflag &= ~(IXON | IXOFF | IXANY);
+	tty.c_cflag |= (CLOCAL | CREAD);
 
-    tty.c_cflag &= ~(PARENB | PARODD);
-    if (parity == GSERIAL_PARITY_ODD)
-        tty.c_cflag |= (PARENB | PARODD);
-    else if (parity == GSERIAL_PARITY_EVEN)
-        tty.c_cflag |= PARENB;
+	tty.c_cflag &= ~(PARENB | PARODD);
+	if (parity == GSERIAL_PARITY_NONE)
+		;
+	else if (parity == GSERIAL_PARITY_ODD)
+		tty.c_cflag |= (PARENB | PARODD);
+	else if (parity == GSERIAL_PARITY_EVEN)
+		tty.c_cflag |= PARENB;
+	else
+	{
+		g_warning("Invalid parity");
+		return FALSE;
+	}
 
-    if (stop_bits == GSERIAL_STOP_BITS_ONE)
-        tty.c_cflag &= ~CSTOPB;
-    else
-        tty.c_cflag |= CSTOPB;
+	if (stop_bits == GSERIAL_STOP_BITS_ONE)
+		tty.c_cflag &= ~CSTOPB;
+	else if (stop_bits == GSERIAL_STOP_BITS_TWO)
+		tty.c_cflag |= CSTOPB;
+	else
+	{
+		g_warning("Invalid stop bits");
+		return FALSE;
+	}
 
-    tty.c_cflag &= ~CRTSCTS;
+	tty.c_cflag &= ~CRTSCTS;
     tty.c_lflag &= ~ICANON;
     tty.c_lflag &= ~ISIG;
     tty.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL);
     tty.c_oflag &= ~OPOST;
     tty.c_oflag &= ~ONLCR;
 
-    if (tcsetattr(fd, TCSANOW, &tty) != 0) {
-        perror("tcsetattr failed");
-    }
+	if (tcsetattr(fd, TCSANOW, &tty) != 0) {
+		perror("tcsetattr failed");
+		return FALSE;
+	}
 #endif
+
+	return TRUE;
 }
 
 static gboolean poll_for_data(GSerialPort *self)
 {
+	self->poll_source_dispatching = TRUE;
+
 	if (gserial_port_is_open(self))
 	{
 		guint bytes_available = gserial_port_bytes_available(self);
+		if (!gserial_port_is_open(self))
+		{
+			self->poll_source_id = 0;
+			self->poll_source_dispatching = FALSE;
+			return G_SOURCE_REMOVE;
+		}
 		if (bytes_available > 0)
 		{
 			g_signal_emit(self, signals[DATA_RECV], 0, bytes_available);
 		}
-		return TRUE;
+		if (!gserial_port_is_open(self) || self->poll_source_id == 0)
+		{
+			self->poll_source_id = 0;
+			self->poll_source_dispatching = FALSE;
+			return G_SOURCE_REMOVE;
+		}
+		self->poll_source_dispatching = FALSE;
+		return G_SOURCE_CONTINUE;
 	}
 	else
 	{
-		return FALSE;
+		self->poll_source_id = 0;
+		self->poll_source_dispatching = FALSE;
+		return G_SOURCE_REMOVE;
+	}
+}
+
+static void stop_polling(GSerialPort *self)
+{
+	if (self->poll_source_id != 0)
+	{
+		if (self->poll_source_dispatching)
+		{
+			self->poll_source_id = 0;
+			return;
+		}
+		g_source_remove(self->poll_source_id);
+		self->poll_source_id = 0;
+	}
+}
+
+static void gserial_port_get_property(GObject *object,
+									  guint property_id,
+									  GValue *value,
+									  GParamSpec *pspec)
+{
+	GSerialPort *self = GSerial_Port(object);
+
+	switch (property_id)
+	{
+	case PROP_BAUD:
+		g_value_set_uint(value, self->baud);
+		break;
+	case PROP_TIMEOUT:
+		g_value_set_uint(value, self->timeout);
+		break;
+	case PROP_BYTE_SIZE:
+		g_value_set_uint(value, self->byte_size);
+		break;
+	case PROP_PARITY:
+		g_value_set_uint(value, self->parity);
+		break;
+	case PROP_STOP_BITS:
+		g_value_set_uint(value, self->stop_bits);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
+	}
+}
+
+static void gserial_port_set_property(GObject *object,
+									  guint property_id,
+									  const GValue *value,
+									  GParamSpec *pspec)
+{
+	GSerialPort *self = GSerial_Port(object);
+
+	switch (property_id)
+	{
+	case PROP_BAUD:
+		gserial_port_set_baud(self, g_value_get_uint(value));
+		break;
+	case PROP_TIMEOUT:
+		gserial_port_set_timeout(self, g_value_get_uint(value));
+		break;
+	case PROP_BYTE_SIZE:
+		gserial_port_set_byte_size(self, g_value_get_uint(value));
+		break;
+	case PROP_PARITY:
+		gserial_port_set_parity(self, g_value_get_uint(value));
+		break;
+	case PROP_STOP_BITS:
+		gserial_port_set_stop_bits(self, g_value_get_uint(value));
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
 	}
 }
 
@@ -287,6 +430,10 @@ static void gserial_port_dispose(GObject *object)
 	if (gserial_port_is_open(self))
 	{
 		gserial_port_close(self);
+	}
+	else
+	{
+		stop_polling(self);
 	}
 
 	G_OBJECT_CLASS(gserial_port_parent_class)->dispose(object);
@@ -329,6 +476,50 @@ static void gserial_port_class_init(GSerialPortClass *klass)
 
 	gobject_class->dispose = gserial_port_dispose;
 	gobject_class->finalize = gserial_port_finalize;
+	gobject_class->get_property = gserial_port_get_property;
+	gobject_class->set_property = gserial_port_set_property;
+
+	properties[PROP_BAUD] =
+		g_param_spec_uint("baud",
+						  "Baud",
+						  "Serial baud rate",
+						  1,
+						  G_MAXUINT,
+						  57600,
+						  G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+	properties[PROP_TIMEOUT] =
+		g_param_spec_uint("timeout",
+						  "Timeout",
+						  "Read and write timeout in milliseconds",
+						  0,
+						  G_MAXUINT,
+						  500,
+						  G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+	properties[PROP_BYTE_SIZE] =
+		g_param_spec_uint("byte-size",
+						  "Byte Size",
+						  "Number of data bits",
+						  GSERIAL_BYTE_SIZE_FIVEBIT,
+						  GSERIAL_BYTE_SIZE_EIGHTBIT,
+						  GSERIAL_BYTE_SIZE_EIGHTBIT,
+						  G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+	properties[PROP_PARITY] =
+		g_param_spec_uint("parity",
+						  "Parity",
+						  "Parity setting",
+						  GSERIAL_PARITY_NONE,
+						  GSERIAL_PARITY_EVEN,
+						  GSERIAL_PARITY_NONE,
+						  G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+	properties[PROP_STOP_BITS] =
+		g_param_spec_uint("stop-bits",
+						  "Stop Bits",
+						  "Stop bit setting",
+						  GSERIAL_STOP_BITS_ONE,
+						  GSERIAL_STOP_BITS_ONEHALF,
+						  GSERIAL_STOP_BITS_ONE,
+						  G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+	g_object_class_install_properties(gobject_class, LAST_PROP, properties);
 }
 
 static void gserial_port_init(GSerialPort *self)
@@ -343,7 +534,9 @@ static void gserial_port_init(GSerialPort *self)
 	self->byte_size = GSERIAL_BYTE_SIZE_EIGHTBIT;
 	self->parity = GSERIAL_PARITY_NONE;
 	self->stop_bits = GSERIAL_STOP_BITS_ONE;
-	self->timeout = 1000000;
+	self->timeout = 500;
+	self->poll_source_id = 0;
+	self->poll_source_dispatching = FALSE;
 }
 
 GSerialPort *gserial_port_new()
@@ -363,17 +556,20 @@ GSerialPort *gserial_port_new_with_params(
 	gserial_port_set_timeout(self, timeout);
 	gserial_port_set_baud(self, baud);
 
-#ifdef _WIN32
-	self->fd = INVALID_HANDLE_VALUE;
-#else
-	self->fd = -1;
-#endif
-
 	return self;
 }
 
 gboolean gserial_port_open(GSerialPort *self, gchar *path)
 {
+	g_return_val_if_fail(GSerial_IS_Port(self), FALSE);
+	g_return_val_if_fail(path != NULL, FALSE);
+
+	if (gserial_port_is_open(self))
+	{
+		g_warning("gserial_port_open called while the port is already open");
+		return FALSE;
+	}
+
 #ifdef _WIN32
 	char fpath[128];
 	snprintf(fpath, 128, "\\\\.\\%s", path);
@@ -385,11 +581,17 @@ gboolean gserial_port_open(GSerialPort *self, gchar *path)
 		return FALSE;
 	}
 
-	set_interface_attr(self->fd,
-					   self->baud,
-					   self->byte_size,
-					   self->parity,
-					   self->stop_bits);
+	if (!set_interface_attr(self->fd,
+							self->baud,
+							self->timeout,
+							self->byte_size,
+							self->parity,
+							self->stop_bits))
+	{
+		CloseHandle(self->fd);
+		self->fd = INVALID_HANDLE_VALUE;
+		return FALSE;
+	}
 
 	// self->thread = g_thread_new(NULL, (GThreadFunc)read_thread, self);
 
@@ -402,23 +604,39 @@ gboolean gserial_port_open(GSerialPort *self, gchar *path)
 
 	ioctl(self->fd, TIOCNXCL);
 
-	set_interface_attr(self->fd,
-					   self->baud,
-					   self->byte_size,
-					   self->parity,
-					   self->stop_bits);
+	if (!set_interface_attr(self->fd,
+							self->baud,
+							self->timeout,
+							self->byte_size,
+							self->parity,
+							self->stop_bits))
+	{
+		close(self->fd);
+		self->fd = -1;
+		return FALSE;
+	}
 
 	// Flush any data in the buffer
     tcflush(self->fd, TCIOFLUSH);
 #endif
 
-	g_timeout_add(1, (GSourceFunc)poll_for_data, (gpointer)self);
+	self->poll_source_id = g_timeout_add(1, (GSourceFunc)poll_for_data, (gpointer)self);
 	g_signal_emit(self, signals[CONNECTED], 0);
 	return TRUE;
 }
 
 void gserial_port_close(GSerialPort *self)
 {
+	g_return_if_fail(GSerial_IS_Port(self));
+
+	if (!gserial_port_is_open(self))
+	{
+		stop_polling(self);
+		return;
+	}
+
+	stop_polling(self);
+
 #ifdef _WIN32
 	CloseHandle(self->fd);
 	self->fd = INVALID_HANDLE_VALUE;
@@ -452,11 +670,12 @@ guint gserial_port_bytes_available(GSerialPort *self)
 	{
 #ifdef _WIN32
 		COMSTAT cs;
-		if (ClearCommError(self->fd, NULL, &cs) == FALSE)
-		{
-			gserial_port_close(self);
-		}
-		return cs.cbInQue;
+			if (ClearCommError(self->fd, NULL, &cs) == FALSE)
+			{
+				gserial_port_close(self);
+				return 0;
+			}
+			return cs.cbInQue;
 		// return (4096 + self->rb_end - self->rb_start) % 4096;
 #else
 		int bytes_available;
@@ -521,11 +740,14 @@ guint8 *gserial_port_read_bytes(GSerialPort *self, guint len, gint *result_lengt
 		   */
 		*result_length = i;
 #else
-		*result_length = read(self->fd, buf, len);
-		if (*result_length == -1)
-		{
-			gserial_port_close(self);
-		}
+			*result_length = read(self->fd, buf, len);
+			if (*result_length == -1)
+			{
+				gserial_port_close(self);
+				*result_length = 0;
+				g_free(buf);
+				return NULL;
+			}
 #endif
 
 		return buf;
@@ -553,6 +775,7 @@ gchar *gserial_port_read_string(GSerialPort *self, guint len)
 	if (data == NULL || result_length == 0)
 	{
 		g_warning("Failed to read data from the serial port");
+		g_free(data);
 		return NULL;
 	}
 
@@ -671,8 +894,14 @@ guint gserial_port_get_baud(GSerialPort *self)
 
 void gserial_port_set_baud(GSerialPort *self, guint baud)
 {
-	g_return_if_fail(self != NULL);
+	g_return_if_fail(GSerial_IS_Port(self));
+	g_return_if_fail(baud > 0);
+
+	if ((guint)self->baud == baud)
+		return;
+
 	self->baud = baud;
+	g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_BAUD]);
 }
 
 GSerialBYTE_SIZE gserial_port_get_byte_size(GSerialPort *self)
@@ -683,8 +912,14 @@ GSerialBYTE_SIZE gserial_port_get_byte_size(GSerialPort *self)
 
 void gserial_port_set_byte_size(GSerialPort *self, GSerialBYTE_SIZE byte_size)
 {
-	g_return_if_fail(self != NULL);
+	g_return_if_fail(GSerial_IS_Port(self));
+	g_return_if_fail(byte_size >= GSERIAL_BYTE_SIZE_FIVEBIT && byte_size <= GSERIAL_BYTE_SIZE_EIGHTBIT);
+
+	if (self->byte_size == byte_size)
+		return;
+
 	self->byte_size = byte_size;
+	g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_BYTE_SIZE]);
 }
 
 GSerialPARITY gserial_port_get_parity(GSerialPort *self)
@@ -695,8 +930,14 @@ GSerialPARITY gserial_port_get_parity(GSerialPort *self)
 
 void gserial_port_set_parity(GSerialPort *self, GSerialPARITY parity)
 {
-	g_return_if_fail(self != NULL);
+	g_return_if_fail(GSerial_IS_Port(self));
+	g_return_if_fail(parity >= GSERIAL_PARITY_NONE && parity <= GSERIAL_PARITY_EVEN);
+
+	if (self->parity == parity)
+		return;
+
 	self->parity = parity;
+	g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_PARITY]);
 }
 
 GSerialSTOP_BITS gserial_port_get_stop_bits(GSerialPort *self)
@@ -707,8 +948,14 @@ GSerialSTOP_BITS gserial_port_get_stop_bits(GSerialPort *self)
 
 void gserial_port_set_stop_bits(GSerialPort *self, GSerialSTOP_BITS stop_bits)
 {
-	g_return_if_fail(self != NULL);
+	g_return_if_fail(GSerial_IS_Port(self));
+	g_return_if_fail(stop_bits >= GSERIAL_STOP_BITS_ONE && stop_bits <= GSERIAL_STOP_BITS_ONEHALF);
+
+	if (self->stop_bits == stop_bits)
+		return;
+
 	self->stop_bits = stop_bits;
+	g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_STOP_BITS]);
 }
 
 guint gserial_port_get_timeout(GSerialPort *self)
@@ -719,6 +966,11 @@ guint gserial_port_get_timeout(GSerialPort *self)
 
 void gserial_port_set_timeout(GSerialPort *self, guint timeout)
 {
-	g_return_if_fail(self != NULL);
+	g_return_if_fail(GSerial_IS_Port(self));
+
+	if ((guint)self->timeout == timeout)
+		return;
+
 	self->timeout = timeout;
+	g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_TIMEOUT]);
 }

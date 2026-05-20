@@ -54,7 +54,7 @@ gi.require_version('GSerial', '1.0')
 from gi.repository import GSerial, GLib
 
 port = GSerial.Port.new()
-port.baud = 57600
+port.set_baud(57600)
 
 def on_data(port, available):
     data = port.read_string(available)
@@ -70,7 +70,7 @@ else:
 GLib.MainLoop().run()
 ```
 
-See the examples/ folder for more advanced usage with byte-level access, event handling, and write-back.
+See the examples/ folder for more advanced usage with byte-level access, event handling, write-back, and SQGI scripts.
 
 ## 🧪 Status
 

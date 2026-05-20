@@ -7,7 +7,7 @@ from gi.repository import GLib
 
 
 port = GSerial.Port.new()
-port.baud = 57600
+port.set_baud(57600)
 
 
 def connected(port):
@@ -29,5 +29,4 @@ if(port.open("COM3")):
 
 loop = GLib.MainLoop()
 loop.run()
-
 

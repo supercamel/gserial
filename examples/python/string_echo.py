@@ -7,8 +7,8 @@ from gi.repository import GLib
 
 # Create a new port instance and configure parameters
 port = GSerial.Port.new()
-port.baud = 9600
-port.timeout = 500  # Timeout in milliseconds
+port.set_baud(9600)
+port.set_timeout(500)  # Timeout in milliseconds
 
 # Example: Echo received string
 def on_data(port, available):
