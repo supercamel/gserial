@@ -1,0 +1,2 @@
+option('android_test_backend', type: 'boolean', value: false,
+  description: 'Include the Android loopback fixture (never enable for production packages)')

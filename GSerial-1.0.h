@@ -3,6 +3,7 @@
 
 #include <glib-object.h>
 #include <glib.h>
+#include "gserial-device.h"
 
 G_BEGIN_DECLS
 
@@ -134,6 +135,34 @@ GSerialPort* gserial_port_new_with_params(
 gboolean gserial_port_open(GSerialPort* self, gchar* path);
 
 /**
+ * gserial_port_open_full:
+ * @self: a #GSerialPort
+ * @path: a device path or Android USB URI returned by #GSerialDeviceManager
+ * @error: return location for an error
+ *
+ * Opens a serial port with error reporting. Android USB permission must already
+ * be granted; this method never shows a permission dialog.
+ *
+ * Returns: whether the port was opened
+ */
+gboolean gserial_port_open_full(GSerialPort *self, const gchar *path, GError **error);
+
+/**
+ * gserial_port_set_control_lines:
+ * @self: an open #GSerialPort
+ * @dtr: DTR output state
+ * @rts: RTS output state
+ * @error: return location for an error
+ *
+ * Sets modem control outputs explicitly. Some USB CDC devices require DTR;
+ * toggling it can reset some microcontroller boards. No hardware flow control
+ * is enabled by this operation.
+ *
+ * Returns: whether both outputs were set
+ */
+gboolean gserial_port_set_control_lines(GSerialPort *self, gboolean dtr, gboolean rts, GError **error);
+
+/**
  * gserial_port_close:
  * @self: a #GSerialPort
  *
@@ -205,6 +234,8 @@ gchar* gserial_port_read_line(GSerialPort* self);
  * and may return a partial count. A zero timeout or nonblocking mode returns
  * immediately. The caller must retry any unwritten bytes. Completion means the
  * bytes were accepted by the OS, not necessarily transmitted on the wire.
+ * Android USB writes use the configured timeout with a minimum of 1 ms (the
+ * Android driver interprets zero as infinite). Nonblocking USB writes use 1 ms.
  *
  * Returns: number of bytes actually written
  */

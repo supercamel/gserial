@@ -1,0 +1,17 @@
+{
+  "schema_version": 2,
+  "name": "GSerial USB Devices",
+  "app_id": "org.gserial.usb.demo",
+  "script": "main.nut",
+  "compile_scripts": false,
+  "features": ["gtk4"],
+  "native": [{
+    "name": "gserial", "dir": "../..", "build_system": "meson",
+    "options": {"android_test_backend": false},
+    "gi": {"strategy": "target", "namespace": "GSerial", "version": "1.0", "library": "gserial-1.0"}
+  }],
+  "platforms": {"android": {
+    "architectures": ["x86_64", "arm64-v8a"], "sdk": "noble-android-r4", "min_sdk": 31,
+    "version_code": 1, "version_name": "0.3.0", "namespaces": ["GSerial-1.0"]
+  }}
+}

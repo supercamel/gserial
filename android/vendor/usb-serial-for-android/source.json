@@ -1,0 +1,27 @@
+{
+  "repository": "https://github.com/mik3y/usb-serial-for-android",
+  "version": "3.10.0",
+  "commit": "a8b9ecc7d32ce6df749c44a2b9e8cb208ac30609",
+  "files": {
+    "LICENSE.txt": "6f467d3d79c5d31734881fb83e082e84512bde05d3f7893e0e8373fd0d2b5d2c",
+    "java/com/hoho/android/usbserial/driver/CdcAcmSerialDriver.java": "f47737123212dd506d46aad33a9531fb2d395bba3f19160bcaf90f0c676465b5",
+    "java/com/hoho/android/usbserial/driver/Ch34xSerialDriver.java": "4c8e53043d5cedbefb7997aa865a3629989f6c207dc63ae05702868fbc47d0d6",
+    "java/com/hoho/android/usbserial/driver/ChromeCcdSerialDriver.java": "d74f66bd67087bc24b28fd950f6e8e048ddbdccf269a490a21d92c436187ab52",
+    "java/com/hoho/android/usbserial/driver/CommonUsbSerialPort.java": "6f2eee9c7988cfd1fb3d5c59b6e1a5fc8bffc53871a7b894401771488ceab53e",
+    "java/com/hoho/android/usbserial/driver/Cp21xxSerialDriver.java": "a092b92e118f4a8110ae7db0563d9b09df32a9c37d1a0ac5f0bc676b3ecf99fe",
+    "java/com/hoho/android/usbserial/driver/FtdiSerialDriver.java": "5d56017afe9d91499bea9392f940721d024cd66891de80d6bbac72bbba75b741",
+    "java/com/hoho/android/usbserial/driver/GsmModemSerialDriver.java": "3ffb6f1d77dc37644d17e9c2dcc72c625ddbe3bf500851acc4daa35ce836d734",
+    "java/com/hoho/android/usbserial/driver/ProbeTable.java": "5db744b235e4c2a93d57d41828720f8b78940fb4d5a1a397c18df9d7a8a20d07",
+    "java/com/hoho/android/usbserial/driver/ProlificSerialDriver.java": "b577e1c84b1a4671c9bcb9b998f2d8ae66a7d3cd5529f293e42f7def776377d7",
+    "java/com/hoho/android/usbserial/driver/SerialTimeoutException.java": "0934207aae9dc4aee7f20d91b44c9387fc364995a746cb33f9e2f52f57dd3f9c",
+    "java/com/hoho/android/usbserial/driver/UsbId.java": "9aedcd07cae0bb1ea521a653e19731e2763913eee7661bb6ab0b445f2ab22360",
+    "java/com/hoho/android/usbserial/driver/UsbSerialDriver.java": "ee606636a29cd4c682b4325eec27dffbba66f07eda93b8c3fd9716520dbac8f1",
+    "java/com/hoho/android/usbserial/driver/UsbSerialPort.java": "9729208dadbbec93b45a35132fcb1baea40257f4a7ed88d50c915475c4f4534a",
+    "java/com/hoho/android/usbserial/driver/UsbSerialProber.java": "f8cb4c38f6cbb80c16498ee0d15933559165e2d4179997bcd7c9f34769db18ad",
+    "java/com/hoho/android/usbserial/util/HexDump.java": "06e0c6e28c2b6d850ff451a54660f64bf83aeae93b688c80f1cf6fba41b81c2e",
+    "java/com/hoho/android/usbserial/util/MonotonicClock.java": "73e29449754cff976e0ab1c3ec4f890f11f6630cee1e3e164df5e3092cea2e12",
+    "java/com/hoho/android/usbserial/util/SerialInputOutputManager.java": "f845c599193351b2855bd85308e6d7ded39970798339b31c4d3f8fd09822c860",
+    "java/com/hoho/android/usbserial/util/UsbUtils.java": "b366665e94d7e4f5da6c0492e31fd63c67dcfb77ab25698dfe1bea4105d3e26f",
+    "java/com/hoho/android/usbserial/util/XonXoffFilter.java": "5db5e232d472126f229a40804d934d40629c7215611f6827871439a4e546ce47"
+  }
+}

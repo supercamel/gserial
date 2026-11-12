@@ -14,7 +14,8 @@ GSerial is ideal for developers building graphical frontends for embedded system
 * Baud rate configuration
 * Parity, stop bits, and data bits settings
 * String, byte array, and line-based I/O
-* Works on Linux and Windows
+* Device enumeration on Linux, Windows, and Android
+* Android USB OTG serial: FTDI, CDC ACM, CP210x, CH34x, and PL2303 adapters
 
 ## 📦 Dependencies
 
@@ -80,6 +81,39 @@ immediately.
 
 Run the Linux regression tests with `meson test -C builddir --print-errorlogs`.
 They use pseudo-terminals and require no serial hardware.
+
+## Device discovery
+
+`GSerial.DeviceManager.new().list_devices()` returns immutable `Device` snapshots.
+Each provides `get_path()`, `get_name()`, USB vendor/product IDs, serial number,
+port/interface number, and `get_has_permission()`. Pass the returned path to
+`Port.open_full()` to receive detailed errors, or the existing `Port.open()` for
+a boolean result. Discovery never opens or changes a serial port.
+
+Linux prefers `/dev/serial/by-id` paths and reads USB metadata from sysfs.
+Windows uses SetupAPI to discover COM ports. Android enumerates supported USB
+serial interfaces through the USB host API, without root or a kernel tty driver.
+These are the supported platforms; macOS and iOS backends are not implemented.
+
+On Android, call `manager.request_permission(device.get_path())`, then handle
+`permission-result(path, granted, message)` before opening. Call `lookup(path)`
+after permission is granted and save its refreshed path. A unique USB serial
+number gives a stable `usb://0403:6001/sSERIAL/0` identity. Before permission, or
+when the serial number is unavailable or duplicated, the selector is a temporary
+Android device ID (`%40...`). Reselect those adapters after unplug/replug; do not
+treat temporary IDs or USB VID/PID alone as persistent radio identities. Android
+may require a new permission grant after detach. Refresh the list and select the
+adapter again if a saved identity cannot be resolved.
+
+Device managers run on their creating thread's GLib context. Keep the manager
+alive while requesting permission; `cancel_permission()` suppresses completion
+but cannot dismiss an already-visible Android system dialog.
+
+## Android / SQGI / Ooblerg
+
+See [the Android guide](android/README.md) for packaging, the NDK entry point,
+emulator regression commands, and RFD900 hardware checks. The
+[device-picker example](examples/android/main.nut) connects at 57600 baud.
 
 ## 🧪 Status
 

@@ -1,4 +1,5 @@
 #include "GSerial-1.0.h"
+#include "gserial-private.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -33,6 +34,9 @@ struct _GSerialPort
 	GSerialSTOP_BITS stop_bits;
 	guint poll_source_id;
 	gboolean disposing;
+#ifdef __ANDROID__
+	GSerialAndroidObject *android;
+#endif
 };
 
 G_DEFINE_TYPE(GSerialPort, gserial_port, G_TYPE_OBJECT)
@@ -604,7 +608,7 @@ void gserial_port_set_nonblocking(GSerialPort *self, gboolean enabled)
 	self->nonblocking = enabled;
 }
 
-gboolean gserial_port_open(GSerialPort *self, gchar *path)
+static gboolean open_native(GSerialPort *self, const gchar *path)
 {
 	g_return_val_if_fail(GSerial_IS_Port(self), FALSE);
 	g_return_val_if_fail(path != NULL, FALSE);
@@ -672,6 +676,61 @@ gboolean gserial_port_open(GSerialPort *self, gchar *path)
 	return TRUE;
 }
 
+gboolean gserial_port_open_full(GSerialPort *self, const gchar *path, GError **error)
+{
+	g_return_val_if_fail(GSerial_IS_Port(self), FALSE);
+	g_return_val_if_fail(path != NULL, FALSE);
+	if (self->disposing || gserial_port_is_open(self)) {
+		g_set_error_literal(error, g_quark_from_static_string("gserial-port-error"), 1,
+			"Serial port is already open or disposed");
+		return FALSE;
+	}
+#ifdef __ANDROID__
+	if (g_str_has_prefix(path, "usb://") || g_str_has_prefix(path, "gserial-test://")) {
+		guint stops = self->stop_bits == GSERIAL_STOP_BITS_ONE ? 1 :
+			self->stop_bits == GSERIAL_STOP_BITS_TWO ? 2 : 3;
+		self->android = gserial_android_open(path, self->baud, self->byte_size + 5,
+			self->parity, stops, error);
+		if (!self->android) return FALSE;
+		self->poll_source_id = g_timeout_add(10, (GSourceFunc)poll_for_data, self);
+		g_signal_emit(self, signals[CONNECTED], 0);
+		return TRUE;
+	}
+#endif
+	if (open_native(self, path)) return TRUE;
+	g_set_error(error, g_quark_from_static_string("gserial-port-error"), 1,
+		"Cannot open or configure serial port: %s", path);
+	return FALSE;
+}
+
+gboolean gserial_port_open(GSerialPort *self, gchar *path)
+{
+	return gserial_port_open_full(self, path, NULL);
+}
+
+gboolean gserial_port_set_control_lines(GSerialPort *self, gboolean dtr, gboolean rts, GError **error)
+{
+	g_return_val_if_fail(GSerial_IS_Port(self), FALSE);
+	if (!gserial_port_is_open(self)) {
+		g_set_error_literal(error, g_quark_from_static_string("gserial-port-error"), 1, "Serial port is closed");
+		return FALSE;
+	}
+#ifdef __ANDROID__
+	if (self->android) return gserial_android_set_control(self->android, dtr, rts, error);
+#endif
+#ifdef _WIN32
+	gboolean ok = EscapeCommFunction(self->fd, dtr ? SETDTR : CLRDTR) &&
+		EscapeCommFunction(self->fd, rts ? SETRTS : CLRRTS);
+#else
+	int set = (dtr ? TIOCM_DTR : 0) | (rts ? TIOCM_RTS : 0);
+	int clear = (!dtr ? TIOCM_DTR : 0) | (!rts ? TIOCM_RTS : 0);
+	gboolean ok = ioctl(self->fd, TIOCMBIS, &set) == 0 && ioctl(self->fd, TIOCMBIC, &clear) == 0;
+#endif
+	if (!ok) g_set_error_literal(error, g_quark_from_static_string("gserial-port-error"), 1,
+		"Serial device does not support the requested modem control outputs");
+	return ok;
+}
+
 void gserial_port_close(GSerialPort *self)
 {
 	g_return_if_fail(GSerial_IS_Port(self));
@@ -684,6 +743,15 @@ void gserial_port_close(GSerialPort *self)
 
 	stop_polling(self);
 
+#ifdef __ANDROID__
+	if (self->android) {
+		GSerialAndroidObject *session = self->android;
+		self->android = NULL;
+		gserial_android_object_close(session);
+		g_signal_emit(self, signals[DISCONNECTED], 0);
+		return;
+	}
+#endif
 #ifdef _WIN32
 	CloseHandle(self->fd);
 	self->fd = INVALID_HANDLE_VALUE;
@@ -697,6 +765,9 @@ void gserial_port_close(GSerialPort *self)
 gboolean gserial_port_is_open(GSerialPort *self)
 {
 	g_return_val_if_fail(self != NULL, FALSE);
+#ifdef __ANDROID__
+	if (self->android) return TRUE;
+#endif
 #ifdef _WIN32
 	if (self->fd != INVALID_HANDLE_VALUE)
 	{
@@ -713,6 +784,13 @@ gboolean gserial_port_is_open(GSerialPort *self)
 
 guint gserial_port_bytes_available(GSerialPort *self)
 {
+#ifdef __ANDROID__
+	if (self && self->android) {
+		gint count = gserial_android_available(self->android, NULL);
+		if (count < 0) { gserial_port_close(self); return 0; }
+		return (guint)count;
+	}
+#endif
 	if (gserial_port_is_open(self))
 	{
 #ifdef _WIN32
@@ -747,6 +825,15 @@ guint gserial_port_bytes_available(GSerialPort *self)
 
 guint8 *gserial_port_read_bytes(GSerialPort *self, guint len, gint *result_length)
 {
+#ifdef __ANDROID__
+	if (self && self->android) {
+		GError *error = NULL;
+		guint8 *bytes = gserial_android_read(self->android, len,
+			self->nonblocking ? 0 : self->timeout, result_length, &error);
+		if (error) { g_clear_error(&error); gserial_port_close(self); }
+		return bytes;
+	}
+#endif
 	if (gserial_port_is_open(self))
 	{
 		guint8 *buf = (guint8 *)g_malloc(len + 1);
@@ -948,6 +1035,14 @@ gint gserial_port_write_bytes(GSerialPort *self, guint8 *bytes, guint length)
 	g_return_val_if_fail(bytes != NULL || length == 0, -1);
 	/* The public result is signed; larger buffers can be sent in chunks. */
 	length = MIN(length, G_MAXINT);
+#ifdef __ANDROID__
+	if (self->android) {
+		gint count = gserial_android_write(self->android, bytes, length,
+			self->nonblocking ? 1 : MAX(self->timeout, 1), NULL);
+		if (count < 0) gserial_port_close(self);
+		return count;
+	}
+#endif
 	if (gserial_port_is_open(self))
 	{
 #ifdef _WIN32

@@ -1,0 +1,5 @@
+.sqgipkg/
+dist/
+dist-*/
+build/
+sqgipkg.lock.json
