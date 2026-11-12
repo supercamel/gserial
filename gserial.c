@@ -16,6 +16,7 @@
 #include <sys/ioctl.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <linux/serial.h>
 
 #endif
@@ -25,15 +26,68 @@ struct _GSerialPort
 	GObject parent_instance;
 	GSERIAL_HANDLE_TYPE fd;
 	int baud;
-	int timeout;
+	guint timeout;
+	gboolean nonblocking;
 	GSerialBYTE_SIZE byte_size;
 	GSerialPARITY parity;
 	GSerialSTOP_BITS stop_bits;
 	guint poll_source_id;
-	gboolean poll_source_dispatching;
+	gboolean disposing;
 };
 
 G_DEFINE_TYPE(GSerialPort, gserial_port, G_TYPE_OBJECT)
+
+GType gserial_byte_size_get_type(void)
+{
+	static gsize type_id;
+	if (g_once_init_enter(&type_id))
+	{
+		static const GEnumValue values[] = {
+			{GSERIAL_BYTE_SIZE_FIVEBIT, "GSERIAL_BYTE_SIZE_FIVEBIT", "fivebit"},
+			{GSERIAL_BYTE_SIZE_SIXBIT, "GSERIAL_BYTE_SIZE_SIXBIT", "sixbit"},
+			{GSERIAL_BYTE_SIZE_SEVENBIT, "GSERIAL_BYTE_SIZE_SEVENBIT", "sevenbit"},
+			{GSERIAL_BYTE_SIZE_EIGHTBIT, "GSERIAL_BYTE_SIZE_EIGHTBIT", "eightbit"},
+			{0, NULL, NULL}
+		};
+		GType type = g_enum_register_static("GSerialBYTE_SIZE", values);
+		g_once_init_leave(&type_id, type);
+	}
+	return type_id;
+}
+
+GType gserial_parity_get_type(void)
+{
+	static gsize type_id;
+	if (g_once_init_enter(&type_id))
+	{
+		static const GEnumValue values[] = {
+			{GSERIAL_PARITY_NONE, "GSERIAL_PARITY_NONE", "none"},
+			{GSERIAL_PARITY_ODD, "GSERIAL_PARITY_ODD", "odd"},
+			{GSERIAL_PARITY_EVEN, "GSERIAL_PARITY_EVEN", "even"},
+			{0, NULL, NULL}
+		};
+		GType type = g_enum_register_static("GSerialPARITY", values);
+		g_once_init_leave(&type_id, type);
+	}
+	return type_id;
+}
+
+GType gserial_stop_bits_get_type(void)
+{
+	static gsize type_id;
+	if (g_once_init_enter(&type_id))
+	{
+		static const GEnumValue values[] = {
+			{GSERIAL_STOP_BITS_ONE, "GSERIAL_STOP_BITS_ONE", "one"},
+			{GSERIAL_STOP_BITS_TWO, "GSERIAL_STOP_BITS_TWO", "two"},
+			{GSERIAL_STOP_BITS_ONEHALF, "GSERIAL_STOP_BITS_ONEHALF", "onehalf"},
+			{0, NULL, NULL}
+		};
+		GType type = g_enum_register_static("GSerialSTOP_BITS", values);
+		g_once_init_leave(&type_id, type);
+	}
+	return type_id;
+}
 
 enum
 {
@@ -128,7 +182,7 @@ static gboolean set_interface_attr(
 	int fd,
 #endif
 	int baud,
-	int timeout,
+	guint timeout,
 	GSerialBYTE_SIZE byte_size,
 	GSerialPARITY parity,
 	GSerialSTOP_BITS stop_bits)
@@ -273,7 +327,7 @@ static gboolean set_interface_attr(
 	tty.c_lflag = 0;
 	tty.c_oflag = 0;
 	tty.c_cc[VMIN] = 0;
-	tty.c_cc[VTIME] = (cc_t)MIN((timeout + 99) / 100, 255);
+	tty.c_cc[VTIME] = (cc_t)((MIN(timeout, 25500u) + 99u) / 100u);
 	tty.c_iflag &= ~(IXON | IXOFF | IXANY);
 	tty.c_cflag |= (CLOCAL | CREAD);
 
@@ -318,49 +372,33 @@ static gboolean set_interface_attr(
 
 static gboolean poll_for_data(GSerialPort *self)
 {
-	self->poll_source_dispatching = TRUE;
+	/* Signal handlers may release the owner or close and reopen the port. */
+	g_object_ref(self);
+	guint source_id = self->poll_source_id;
 
 	if (gserial_port_is_open(self))
 	{
 		guint bytes_available = gserial_port_bytes_available(self);
-		if (!gserial_port_is_open(self))
-		{
-			self->poll_source_id = 0;
-			self->poll_source_dispatching = FALSE;
-			return G_SOURCE_REMOVE;
-		}
-		if (bytes_available > 0)
+		if (bytes_available > 0 && self->poll_source_id == source_id)
 		{
 			g_signal_emit(self, signals[DATA_RECV], 0, bytes_available);
 		}
-		if (!gserial_port_is_open(self) || self->poll_source_id == 0)
-		{
-			self->poll_source_id = 0;
-			self->poll_source_dispatching = FALSE;
-			return G_SOURCE_REMOVE;
-		}
-		self->poll_source_dispatching = FALSE;
-		return G_SOURCE_CONTINUE;
 	}
-	else
-	{
-		self->poll_source_id = 0;
-		self->poll_source_dispatching = FALSE;
-		return G_SOURCE_REMOVE;
-	}
+
+	gboolean keep_polling = self->poll_source_id == source_id &&
+		gserial_port_is_open(self);
+	g_object_unref(self);
+	return keep_polling;
 }
 
 static void stop_polling(GSerialPort *self)
 {
 	if (self->poll_source_id != 0)
 	{
-		if (self->poll_source_dispatching)
-		{
-			self->poll_source_id = 0;
-			return;
-		}
-		g_source_remove(self->poll_source_id);
+		guint source_id = self->poll_source_id;
 		self->poll_source_id = 0;
+		/* GLib also permits removing the source currently being dispatched. */
+		g_source_remove(source_id);
 	}
 }
 
@@ -427,6 +465,7 @@ static void gserial_port_dispose(GObject *object)
 	GSerialPort *self =
 		G_TYPE_CHECK_INSTANCE_CAST(object, GSERIAL_TYPE_PORT, GSerialPort);
 
+	self->disposing = TRUE;
 	if (gserial_port_is_open(self))
 	{
 		gserial_port_close(self);
@@ -536,7 +575,6 @@ static void gserial_port_init(GSerialPort *self)
 	self->stop_bits = GSERIAL_STOP_BITS_ONE;
 	self->timeout = 500;
 	self->poll_source_id = 0;
-	self->poll_source_dispatching = FALSE;
 }
 
 GSerialPort *gserial_port_new()
@@ -559,10 +597,19 @@ GSerialPort *gserial_port_new_with_params(
 	return self;
 }
 
+void gserial_port_set_nonblocking(GSerialPort *self, gboolean enabled)
+{
+	g_return_if_fail(GSerial_IS_Port(self));
+	g_return_if_fail(!gserial_port_is_open(self));
+	self->nonblocking = enabled;
+}
+
 gboolean gserial_port_open(GSerialPort *self, gchar *path)
 {
 	g_return_val_if_fail(GSerial_IS_Port(self), FALSE);
 	g_return_val_if_fail(path != NULL, FALSE);
+	if (self->disposing)
+		return FALSE;
 
 	if (gserial_port_is_open(self))
 	{
@@ -596,7 +643,7 @@ gboolean gserial_port_open(GSerialPort *self, gchar *path)
 	// self->thread = g_thread_new(NULL, (GThreadFunc)read_thread, self);
 
 #else
-	self->fd = open(path, O_RDWR | O_NOCTTY | O_SYNC);
+	self->fd = open(path, O_RDWR | O_NOCTTY | (self->nonblocking ? O_NONBLOCK : O_SYNC));
 	if (self->fd == -1)
 	{
 		return FALSE;
@@ -743,7 +790,8 @@ guint8 *gserial_port_read_bytes(GSerialPort *self, guint len, gint *result_lengt
 			*result_length = read(self->fd, buf, len);
 			if (*result_length == -1)
 			{
-				gserial_port_close(self);
+				if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
+					gserial_port_close(self);
 				*result_length = 0;
 				g_free(buf);
 				return NULL;
@@ -838,16 +886,80 @@ gchar *gserial_port_read_line(GSerialPort *self)
 	}
 }
 
+#ifndef _WIN32
+static gint write_with_timeout(int fd, const guint8 *bytes, guint length,
+		guint timeout, gboolean nonblocking)
+{
+	if (nonblocking)
+	{
+		ssize_t written = write(fd, bytes, length);
+		if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
+			return 0;
+		return (gint)written;
+	}
+
+	/* A readiness check alone cannot bound a subsequent blocking write. */
+	int flags = fcntl(fd, F_GETFL);
+	if (flags == -1 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
+		return -1;
+
+	gint64 deadline = g_get_monotonic_time() + (gint64)timeout * 1000;
+	gint total = 0;
+	while ((guint)total < length)
+	{
+		ssize_t written = write(fd, bytes + total, length - (guint)total);
+		if (written > 0)
+			total += (gint)written;
+		else if (written < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
+		{
+			total = -1;
+			break;
+		}
+		if ((guint)total == length)
+			break;
+
+		gint64 remaining = deadline - g_get_monotonic_time();
+		if (remaining <= 0)
+			break;
+		struct pollfd poll_fd = {fd, POLLOUT, 0};
+		int wait_ms = (int)MIN((remaining + 999) / 1000, G_MAXINT);
+		int ready = poll(&poll_fd, 1, wait_ms);
+		if (ready < 0 && errno == EINTR)
+			continue;
+		if (ready < 0 || (poll_fd.revents & (POLLERR | POLLHUP | POLLNVAL)))
+		{
+			total = -1;
+			break;
+		}
+		if (ready == 0 && g_get_monotonic_time() >= deadline)
+			break;
+	}
+
+	/* Restore blocking reads before returning or emitting a disconnection. */
+	if (fcntl(fd, F_SETFL, flags) == -1)
+		return -1;
+	return total;
+}
+#endif
+
 gint gserial_port_write_bytes(GSerialPort *self, guint8 *bytes, guint length)
 {
+	g_return_val_if_fail(GSerial_IS_Port(self), -1);
+	g_return_val_if_fail(bytes != NULL || length == 0, -1);
+	/* The public result is signed; larger buffers can be sent in chunks. */
+	length = MIN(length, G_MAXINT);
 	if (gserial_port_is_open(self))
 	{
 #ifdef _WIN32
-		DWORD bw;
-		WriteFile(self->fd, (char *)bytes, length, &bw, NULL);
+		DWORD bw = 0;
+		if (!WriteFile(self->fd, bytes, length, &bw, NULL))
+		{
+			gserial_port_close(self);
+			return -1;
+		}
 		return (gint)bw;
 #else
-		int r = write(self->fd, bytes, length);
+		int r = write_with_timeout(self->fd, bytes, length, self->timeout, self->nonblocking);
 		if (r == -1)
 		{
 			gserial_port_close(self);
@@ -864,26 +976,8 @@ gint gserial_port_write_bytes(GSerialPort *self, guint8 *bytes, guint length)
 
 gint gserial_port_write_string(GSerialPort *self, const gchar *s)
 {
-	if (gserial_port_is_open(self))
-	{
-#ifdef _WIN32
-		DWORD bw;
-		WriteFile(self->fd, s, strlen(s), &bw, NULL);
-		return (gint)bw;
-#else
-		int r = write(self->fd, s, strlen(s));
-		if (r == -1)
-		{
-			gserial_port_close(self);
-		}
-		return r;
-#endif
-	}
-	else
-	{
-		g_warning("gserial_port_write_string failed because the port is not open");
-		return 0;
-	}
+	g_return_val_if_fail(s != NULL, -1);
+	return gserial_port_write_bytes(self, (guint8 *)s, (guint)MIN(strlen(s), G_MAXINT));
 }
 
 guint gserial_port_get_baud(GSerialPort *self)
@@ -899,6 +993,7 @@ void gserial_port_set_baud(GSerialPort *self, guint baud)
 
 	if ((guint)self->baud == baud)
 		return;
+	g_return_if_fail(!gserial_port_is_open(self));
 
 	self->baud = baud;
 	g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_BAUD]);
@@ -917,6 +1012,7 @@ void gserial_port_set_byte_size(GSerialPort *self, GSerialBYTE_SIZE byte_size)
 
 	if (self->byte_size == byte_size)
 		return;
+	g_return_if_fail(!gserial_port_is_open(self));
 
 	self->byte_size = byte_size;
 	g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_BYTE_SIZE]);
@@ -935,6 +1031,7 @@ void gserial_port_set_parity(GSerialPort *self, GSerialPARITY parity)
 
 	if (self->parity == parity)
 		return;
+	g_return_if_fail(!gserial_port_is_open(self));
 
 	self->parity = parity;
 	g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_PARITY]);
@@ -953,6 +1050,7 @@ void gserial_port_set_stop_bits(GSerialPort *self, GSerialSTOP_BITS stop_bits)
 
 	if (self->stop_bits == stop_bits)
 		return;
+	g_return_if_fail(!gserial_port_is_open(self));
 
 	self->stop_bits = stop_bits;
 	g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_STOP_BITS]);
@@ -970,6 +1068,7 @@ void gserial_port_set_timeout(GSerialPort *self, guint timeout)
 
 	if ((guint)self->timeout == timeout)
 		return;
+	g_return_if_fail(!gserial_port_is_open(self));
 
 	self->timeout = timeout;
 	g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_TIMEOUT]);

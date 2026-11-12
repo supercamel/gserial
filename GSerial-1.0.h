@@ -27,6 +27,7 @@ typedef enum {
  *
  * Returns: the #GType for #GSerialBYTE_SIZE
  */
+GType gserial_byte_size_get_type(void);
 #define GSERIAL_TYPE_BYTE_SIZE (gserial_byte_size_get_type())
 
 /**
@@ -48,6 +49,7 @@ typedef enum {
  *
  * Returns: the #GType for #GSerialPARITY
  */
+GType gserial_parity_get_type(void);
 #define GSERIAL_TYPE_PARITY (gserial_parity_get_type())
 
 /**
@@ -69,6 +71,7 @@ typedef enum {
  *
  * Returns: the #GType for #GSerialSTOP_BITS
  */
+GType gserial_stop_bits_get_type(void);
 #define GSERIAL_TYPE_STOP_BITS (gserial_stop_bits_get_type())
 
 #define GSERIAL_TYPE_PORT (gserial_port_get_type())
@@ -77,6 +80,8 @@ typedef enum {
  * GSerialPort:
  *
  * Represents a serial port instance.
+ * Configure settings before opening; close the port before changing settings.
+ * Calls on an instance and its main-context callbacks must be serialized.
  */
 G_DECLARE_FINAL_TYPE(GSerialPort, gserial_port, GSerial, Port, GObject)
 
@@ -88,6 +93,16 @@ G_DECLARE_FINAL_TYPE(GSerialPort, gserial_port, GSerial, Port, GObject)
  * Returns: (transfer full): a new #GSerialPort instance
  */
 GSerialPort* gserial_port_new(void);
+
+/**
+ * gserial_port_set_nonblocking:
+ * @self: a #GSerialPort
+ * @enabled: whether to use nonblocking POSIX I/O
+ *
+ * Set before opening. Would-block reads/writes return zero without closing.
+ * On Windows, this flag has no effect; native read/write timeouts still apply.
+ */
+void gserial_port_set_nonblocking(GSerialPort *self, gboolean enabled);
 
 /**
  * gserial_port_new_with_params:
@@ -186,6 +201,10 @@ gchar* gserial_port_read_line(GSerialPort* self);
  * @length: number of bytes to write
  *
  * Writes raw bytes to the serial port.
+ * On POSIX, blocking writes wait up to the configured timeout for buffer space
+ * and may return a partial count. A zero timeout or nonblocking mode returns
+ * immediately. The caller must retry any unwritten bytes. Completion means the
+ * bytes were accepted by the OS, not necessarily transmitted on the wire.
  *
  * Returns: number of bytes actually written
  */
@@ -197,6 +216,7 @@ gint gserial_port_write_bytes(GSerialPort* self, guint8* bytes, guint length);
  * @s: string to write
  *
  * Writes a string to the serial port.
+ * Uses the same timeout and partial-write behavior as gserial_port_write_bytes().
  *
  * Returns: number of bytes actually written
  */
@@ -217,7 +237,8 @@ guint gserial_port_get_baud(GSerialPort* self);
  * @self: a #GSerialPort
  * @baud: baud rate to set
  *
- * Sets the baud rate.
+ * Sets the baud rate. Close the port before changing this setting; attempts
+ * to change it while open are rejected and leave the existing value unchanged.
  */
 void gserial_port_set_baud(GSerialPort* self, guint baud);
 
@@ -236,7 +257,8 @@ GSerialBYTE_SIZE gserial_port_get_byte_size(GSerialPort* self);
  * @self: a #GSerialPort
  * @byte_size: new byte size
  *
- * Sets the byte size.
+ * Sets the byte size. Close the port before changing this setting; attempts
+ * to change it while open are rejected and leave the existing value unchanged.
  */
 void gserial_port_set_byte_size(GSerialPort* self, GSerialBYTE_SIZE byte_size);
 
@@ -255,7 +277,8 @@ GSerialPARITY gserial_port_get_parity(GSerialPort* self);
  * @self: a #GSerialPort
  * @parity: new parity setting
  *
- * Sets the parity.
+ * Sets the parity. Close the port before changing this setting; attempts
+ * to change it while open are rejected and leave the existing value unchanged.
  */
 void gserial_port_set_parity(GSerialPort* self, GSerialPARITY parity);
 
@@ -274,7 +297,8 @@ GSerialSTOP_BITS gserial_port_get_stop_bits(GSerialPort* self);
  * @self: a #GSerialPort
  * @stop_bits: new stop bit setting
  *
- * Sets the stop bits.
+ * Sets the stop bits. Close the port before changing this setting; attempts
+ * to change it while open are rejected and leave the existing value unchanged.
  */
 void gserial_port_set_stop_bits(GSerialPort* self, GSerialSTOP_BITS stop_bits);
 
@@ -294,6 +318,10 @@ guint gserial_port_get_timeout(GSerialPort* self);
  * @timeout: timeout in milliseconds
  *
  * Sets the timeout value for reads and writes.
+ * Close the port before changing this setting; attempts to change it while
+ * open are rejected and leave the existing value unchanged.
+ * POSIX read timeouts round up to 100 ms and are capped at 25.5 seconds;
+ * POSIX writes use the timeout in milliseconds. Zero means no waiting on POSIX.
  */
 void gserial_port_set_timeout(GSerialPort* self, guint timeout);
 

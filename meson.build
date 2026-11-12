@@ -24,6 +24,7 @@ pkg.generate(gseriallib,
   name: 'gserial',
   filebase: 'gserial-1.0',
   description: 'A simple serial port library',
+  requires: ['glib-2.0', 'gobject-2.0'],
   subdirs: 'gserial-1.0'
   )
 
@@ -41,7 +42,7 @@ gserial_gir = gnome.generate_gir(gseriallib,
   namespace: 'GSerial',
   symbol_prefix: 'gserial_',
   identifier_prefix: 'GSerial',
-  export_packages: 'gserial',
+  export_packages: 'gserial-1.0',
   includes: ['GObject-2.0'],
   install: true,
   install_dir_gir: get_option('libdir') / 'girepository-1.0',
@@ -52,4 +53,14 @@ gnome.generate_vapi('gserial-1.0',
   install: true,
   sources: gserial_gir
   )
+
+if host_machine.system() == 'linux'
+  serial_test = executable('test-gserial', 'tests/test-gserial.c',
+    include_directories: '.',
+    dependencies: dependencies,
+    link_with: gseriallib,
+    link_args: ['-lutil'],
+  )
+  test('gserial', serial_test, timeout: 30)
+endif
 

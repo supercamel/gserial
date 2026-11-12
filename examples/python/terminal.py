@@ -84,6 +84,8 @@ class SerialTerminal(Gtk.Application):
             self.port = None
 
     def disconnect_port(self):
+        if self.port is not None and self.port.is_open():
+            self.port.close()
         self.connected = False
         self.connect_button.set_label("Connect")
         self.entry.set_sensitive(False)

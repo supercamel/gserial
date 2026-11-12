@@ -72,6 +72,15 @@ GLib.MainLoop().run()
 
 See the examples/ folder for more advanced usage with byte-level access, event handling, write-back, and SQGI scripts.
 
+Configure baud, timeout, parity, data bits, stop bits, and nonblocking mode before
+opening the port. Close it before changing settings. On POSIX, blocking writes
+wait up to the configured timeout for buffer space and can return a partial byte
+count; retry any unwritten bytes. Nonblocking mode and a zero timeout return
+immediately.
+
+Run the Linux regression tests with `meson test -C builddir --print-errorlogs`.
+They use pseudo-terminals and require no serial hardware.
+
 ## 🧪 Status
 
 GSerial is stable and in use in real-world applications. Further contributions, testing, and packaging help are welcome!
